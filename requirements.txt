@@ -1,0 +1,4 @@
+# Streamlit Community Cloud reads this file to build the deploy environment.
+# Installing the project itself in editable mode pulls in every dependency
+# declared in pyproject.toml — single source of truth, no duplication/drift.
+-e .
