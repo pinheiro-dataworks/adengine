@@ -27,7 +27,6 @@ uplift_summary = dl.load_json("uplift_summary") if (dl.MARTS_DIR / "uplift_summa
 qini_curve = dl.load_parquet("qini_curve") if (dl.MARTS_DIR / "qini_curve.parquet").exists() else None
 
 st.markdown(
-    '<p class="ade-section-eyebrow">Page 3 of 6 · calibrated HistGradientBoosting vs. logistic baseline</p>'
     '<h1 style="margin-bottom:2px;">Propensity to Convert</h1>'
     f'<p style="color:{theme.SLATE};font-size:13.5px;max-width:700px;">'
     'Which customers are likely to purchase again in the next 90 days, how trustworthy are those probabilities, and who should be targeted first?</p>',

@@ -24,7 +24,6 @@ fact = dl.load_parquet("fact_transactions")
 dim_customers = dl.load_parquet("dim_customers")
 
 st.markdown(
-    '<p class="ade-section-eyebrow">Page 6 of 6 · medallion architecture</p>'
     '<h1 style="margin-bottom:2px;">Pipeline &amp; Data Quality</h1>'
     f'<p style="color:{theme.SLATE};font-size:13.5px;max-width:680px;">'
     'What happened to the raw data before any chart on this dashboard could be trusted?</p>',

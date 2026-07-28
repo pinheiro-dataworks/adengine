@@ -31,7 +31,6 @@ dq_report = dl.load_dq_report()
 pipe_cfg = dl.load_config("pipeline")
 
 st.markdown(
-    '<p class="ade-section-eyebrow">Page 1 of 6 · decision audience: leadership</p>'
     '<h1 style="margin-bottom:2px;">Executive Overview</h1>'
     f'<p style="color:{theme.SLATE};font-size:13.5px;max-width:640px;">'
     'Is demand growing, is spend efficient, and where is customer value concentrated right now?</p>',

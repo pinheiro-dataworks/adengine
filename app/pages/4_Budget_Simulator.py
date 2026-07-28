@@ -30,7 +30,6 @@ channels = list(sim_summary["hill_params"].keys())
 params = {c: HillParams(**sim_summary["hill_params"][c]) for c in channels}
 
 st.markdown(
-    '<p class="ade-section-eyebrow">Page 5 of 6 · Hill-function response curves + SLSQP optimization</p>'
     '<h1 style="margin-bottom:2px;">Budget Allocation Simulator</h1>'
     f'<p style="color:{theme.SLATE};font-size:13.5px;max-width:720px;">'
     'Given a fixed monthly budget, how should spend split across channels to maximize expected conversions under diminishing returns?</p>',

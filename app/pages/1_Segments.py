@@ -25,7 +25,6 @@ summary = dl.load_json("segmentation_summary")
 cf_current = dl.load_parquet("customer_features_current")
 
 st.markdown(
-    '<p class="ade-section-eyebrow">Page 2 of 6 · RFM + K-Means</p>'
     '<h1 style="margin-bottom:2px;">RFM Segmentation</h1>'
     f'<p style="color:{theme.SLATE};font-size:13.5px;max-width:680px;">'
     'Which behavioral groups exist in the customer base, how stable are they, and what should the business do with each one?</p>',

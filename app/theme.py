@@ -74,11 +74,19 @@ def inject_css() -> None:
         '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>',
         '<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">',
         "<style>",
-        f'html, body, [class*="css"] {{ font-family: {FONT_BODY}; }}',
+        # Deliberately scoped to html/body only — NOT a wildcard like
+        # [class*="css"] or "section ... *". Streamlit's own icon glyphs
+        # (e.g. the sidebar collapse arrow) are rendered via a ligature
+        # font on elements whose classes also match those broad patterns;
+        # overriding font-family that broadly replaces the icon font and
+        # the browser falls back to showing the ligature's literal name
+        # ("keyboard_double_arrow_left") as text. Plain inheritance from
+        # body is safe: an element's own explicit font-family always wins
+        # over an inherited one, so Streamlit's icon rule is untouched.
+        f'html, body {{ font-family: {FONT_BODY}; }}',
         f'h1, h2, h3, .ade-display {{ font-family: {FONT_DISPLAY}; letter-spacing: -0.01em; }}',
         f'.ade-mono {{ font-family: {FONT_MONO}; }}',
-        f'section[data-testid="stSidebar"] {{ background: {PANEL}; border-right: 1px solid {LINE}; }}',
-        f'section[data-testid="stSidebar"] * {{ font-family: {FONT_BODY}; }}',
+        f'section[data-testid="stSidebar"] {{ background: {PANEL}; border-right: 1px solid {LINE}; font-family: {FONT_BODY}; }}',
         '.block-container { padding-top: 2rem; max-width: 1440px; }',
         '.ade-tag { font-family: ' + FONT_MONO + '; font-size: 10.5px; font-weight: 600; text-transform: uppercase; '
         'letter-spacing: 0.04em; padding: 3px 9px; border-radius: 6px; white-space: nowrap; display: inline-block; }',

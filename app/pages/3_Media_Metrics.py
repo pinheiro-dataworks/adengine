@@ -24,7 +24,6 @@ revenue_matrix = dl.load_parquet("cohort_revenue_matrix")
 ltv_table = dl.load_parquet("ltv_table")
 
 st.markdown(
-    '<p class="ade-section-eyebrow">Page 4 of 6 · CPA · LTV · ROAS · cohort retention</p>'
     '<h1 style="margin-bottom:2px;">Media Metrics Engine</h1>'
     f'<p style="color:{theme.SLATE};font-size:13.5px;max-width:680px;">'
     'Which channels convert efficiently, and how does customer value accumulate after acquisition?</p>',
