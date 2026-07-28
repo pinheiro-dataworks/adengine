@@ -1,0 +1,9 @@
+{
+  "chosen_k": 5,
+  "ari_seed_mean": 0.997645203087818,
+  "ari_seed_min": 0.9971578795913594,
+  "ari_bootstrap_mean": 0.9518111337712115,
+  "ari_bootstrap_min": 0.7507743978800814,
+  "ari_threshold": 0.85,
+  "stable": true
+}

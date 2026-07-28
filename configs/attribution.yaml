@@ -1,0 +1,27 @@
+# Synthetic media-attribution layer — see docs/adr/002-synthetic-attribution.md
+# Online Retail II has no channel/cost data. These parameters generate a channel,
+# an acquisition cost, and a campaign-exposure flag per customer, conditioned on
+# real behavior (monetary value), so the layer is analytically interesting rather
+# than pure noise. Every artifact derived from this file is labeled SYNTHETIC.
+
+seed: 42
+
+channels:
+  # CAC scaled so LTV:CAC and ROAS land in a plausible marketing-economics
+  # range against this dataset's real (large) historical customer value —
+  # see docs/adr/002-synthetic-attribution.md for the calibration note.
+  paid_search: {base_prob: 0.35, cac_mean_log: 4.74, cac_sigma_log: 0.35}   # ~£115 mean
+  paid_social: {base_prob: 0.25, cac_mean_log: 4.43, cac_sigma_log: 0.35}   # ~£85  mean
+  email:       {base_prob: 0.25, cac_mean_log: 3.38, cac_sigma_log: 0.30}   # ~£30  mean
+  display:     {base_prob: 0.15, cac_mean_log: 4.93, cac_sigma_log: 0.40}   # ~£150 mean
+
+# Customers above the 75th percentile of historical monetary value get their
+# channel-choice probabilities nudged before renormalization.
+conditioning:
+  high_value_percentile: 75
+  high_value_shift:
+    paid_search: 0.10
+    email: -0.05
+    display: -0.05
+
+campaign_exposure_rate: 0.5   # feeds the T-Learner uplift model

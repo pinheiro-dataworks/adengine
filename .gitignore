@@ -1,0 +1,29 @@
+# Raw source is large and fully regenerable via `make download` — keep only
+# the lineage manifest (hash, timestamp, row count) under version control.
+data/raw/*
+!data/raw/manifest.json
+
+# Silver is a large intermediate the dashboard never reads directly — keep
+# only the small DQ report it's read from (app/data_loader.load_dq_report).
+data/staging/*
+!data/staging/dq_report.json
+
+# Gold marts + trained models ARE versioned on purpose: the dashboard reads
+# only from these, so a clone works immediately without running the pipeline.
+
+*.egg-info/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.claude/
+
+.venv/
+venv/
+
+.streamlit/secrets.toml
+
+.DS_Store
+Thumbs.db

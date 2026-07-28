@@ -1,0 +1,49 @@
+{
+  "rows_raw": 1067371,
+  "rows_silver": 776828,
+  "retention_pct": 72.78,
+  "rules": [
+    {
+      "rule": "cancellations_c_invoices",
+      "rationale": "Invoices prefixed 'C' are cancellations, not completed conversions.",
+      "rows_before": 1067371,
+      "rows_removed": 19494,
+      "pct_of_input": 1.83
+    },
+    {
+      "rule": "non_product_stock_code",
+      "rationale": "Postage, discounts, bank charges, and other non-product line items (see configs/pipeline.yaml).",
+      "rows_before": 1047877,
+      "rows_removed": 4345,
+      "pct_of_input": 0.41
+    },
+    {
+      "rule": "invalid_quantity_or_price",
+      "rationale": "Non-positive quantity or price: manual adjustments and data-entry artifacts, not valid sales.",
+      "rows_before": 1043532,
+      "rows_removed": 6176,
+      "pct_of_input": 0.59
+    },
+    {
+      "rule": "missing_customer_id",
+      "rationale": "No stable key for customer-level modeling \u2014 cannot segment or score an anonymous transaction.",
+      "rows_before": 1037356,
+      "rows_removed": 234466,
+      "pct_of_input": 22.6
+    },
+    {
+      "rule": "duplicate_line_items",
+      "rationale": "Exact duplicate rows are ingestion artifacts from the source export.",
+      "rows_before": 802890,
+      "rows_removed": 26062,
+      "pct_of_input": 3.25
+    },
+    {
+      "rule": "standardize_types",
+      "rationale": "customer_id -> string, invoice_date -> UTC, revenue = quantity * unit_price, country trimmed.",
+      "rows_before": 776828,
+      "rows_removed": 0,
+      "pct_of_input": 0.0
+    }
+  ]
+}

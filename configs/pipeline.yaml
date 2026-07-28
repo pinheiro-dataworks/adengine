@@ -1,0 +1,46 @@
+# Pipeline configuration — paths, temporal cutoffs, cleaning rules.
+# See docs/adr/001-temporal-cutoff.md for the reasoning behind the dates below.
+
+paths:
+  raw_xlsx: "data/raw/online_retail_II.xlsx"
+  manifest: "data/raw/manifest.json"
+  bronze: "data/raw/bronze.parquet"
+  staging: "data/staging/silver.parquet"
+  dq_report: "data/staging/dq_report.json"
+  marts_dir: "data/marts"
+
+source:
+  url: "https://archive.ics.uci.edu/static/public/502/online+retail+ii.zip"
+  fallback_note: "Kaggle 'Customer Segmentation' mirror requires kagglehub auth; Online Retail II (UCI) is the primary, transactional path."
+  sheets: ["Year 2009-2010", "Year 2010-2011"]
+
+# ADR-001 — anti-leakage temporal design.
+temporal:
+  t_full: "2011-06-30"        # cutoff used for segmentation / the "current state" gold snapshot
+  t_train: "2011-03-31"       # propensity model training feature cutoff
+  t_test: "2011-06-30"        # propensity model testing feature cutoff
+  target_window_days: 90
+  dataset_end: "2011-12-09"   # true end of history, leaves a fully future holdout beyond t_test + 90d
+
+cleaning:
+  # Rules applied in this exact order — order is a config value, not incidental.
+  non_product_stock_codes:
+    - "POST"      # postage
+    - "DOT"       # dotcom postage
+    - "M"         # manual adjustment
+    - "m"
+    - "D"         # discount
+    - "S"         # samples
+    - "B"         # adjustment / bad debt
+    - "BANK CHARGES"
+    - "ADJUST"
+    - "AMAZONFEE"
+    - "PADS"
+    - "CRUK"      # Cancer Research UK donation
+    - "GIFT"
+    - "TEST001"
+    - "TEST002"
+
+rfm:
+  monetary_winsor_pct: 99
+  recency_winsor_pct: 99

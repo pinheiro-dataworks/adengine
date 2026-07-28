@@ -1,0 +1,11 @@
+{
+  "source_url": "https://archive.ics.uci.edu/static/public/502/online+retail+ii.zip",
+  "downloaded_at": "2026-07-20T23:41:09.485579+00:00",
+  "sha256": "bcbe73b35f5b7babf197fb0cb983a11f5d9ff929078d4aa53d171b1f2df2e980",
+  "rows_raw": 1067371,
+  "sheets": [
+    "Year 2009-2010",
+    "Year 2010-2011"
+  ],
+  "file_size_bytes": 45622278
+}
