@@ -23,7 +23,9 @@ from dataclasses import dataclass, field
 
 import numpy as np
 import pandas as pd
+from sklearn.ensemble import HistGradientBoostingClassifier, HistGradientBoostingRegressor
 from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import KFold
 from sklearn.neighbors import NearestNeighbors
 
 from adengine.logging_conf import get_logger
@@ -237,4 +239,65 @@ def difference_in_differences(
             "pre_trend_slope_diff": slope_diff,
             "parallel_trends_holds": bool(parallel_trends_holds),
         },
+    )
+
+
+def double_ml_ate(
+    df: pd.DataFrame,
+    feature_cols: list[str],
+    treatment_col: str,
+    outcome_col: str,
+    n_folds: int = 5,
+    seed: int = 42,
+) -> ATEEstimate:
+    """Cross-fitted partialling-out Double ML (Chernozhukov et al. 2018,
+    "Double/Debiased Machine Learning for Treatment and Causal Parameters"),
+    implemented directly on sklearn -- see ADR-008 for why this is not
+    delegated to econml.
+
+    Partially linear model: Y = theta*T + g(X) + eps, T = m(X) + v(X). Both
+    nuisance functions (g = E[Y|X], m = E[T|X]) are fit on K-1 folds and
+    predicted out-of-fold, so theta is estimated from residuals the nuisance
+    models never saw -- the Neyman-orthogonality property that makes this
+    estimator robust to nuisance-model bias, unlike a naive plug-in.
+    """
+    df = df.reset_index(drop=True)
+    X = df[feature_cols].to_numpy()
+    treatment = df[treatment_col].to_numpy().astype(float)
+    outcome = df[outcome_col].to_numpy().astype(float)
+    n = len(df)
+
+    outcome_resid = np.zeros(n)
+    treatment_resid = np.zeros(n)
+
+    kfold = KFold(n_splits=n_folds, shuffle=True, random_state=seed)
+    for train_idx, test_idx in kfold.split(X):
+        outcome_model = HistGradientBoostingRegressor(random_state=seed)
+        outcome_model.fit(X[train_idx], outcome[train_idx])
+        g_hat = outcome_model.predict(X[test_idx])
+
+        treatment_model = HistGradientBoostingClassifier(random_state=seed)
+        treatment_model.fit(X[train_idx], treatment[train_idx].astype(int))
+        m_hat = treatment_model.predict_proba(X[test_idx])[:, 1]
+
+        outcome_resid[test_idx] = outcome[test_idx] - g_hat
+        treatment_resid[test_idx] = treatment[test_idx] - m_hat
+
+    theta_hat = float(np.sum(treatment_resid * outcome_resid) / np.sum(treatment_resid ** 2))
+
+    # Closed-form asymptotic variance for the partialling-out estimator
+    # (Chernozhukov et al. 2018, eq. 2.3): Var(theta) ~ E[psi^2] / n, where
+    # psi_i = v_i * (eps_i - theta*v_i) is the (estimated) Neyman-orthogonal score.
+    psi = treatment_resid * (outcome_resid - theta_hat * treatment_resid)
+    sigma_sq = np.mean(psi ** 2) / (np.mean(treatment_resid ** 2) ** 2)
+    se = float(np.sqrt(sigma_sq / n))
+
+    return ATEEstimate(
+        method="dml",
+        ate=theta_hat,
+        ci_low=theta_hat - 1.96 * se,
+        ci_high=theta_hat + 1.96 * se,
+        n_treated=int(treatment.sum()),
+        n_control=int((1 - treatment).sum()),
+        extra={"n_folds": n_folds, "se": se},
     )
