@@ -10,7 +10,12 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from adengine.causal_estimators import naive_diff_in_means, propensity_score_matching
+from adengine.causal_estimators import (
+    _fit_propensity_scores,
+    inverse_propensity_weighting,
+    naive_diff_in_means,
+    propensity_score_matching,
+)
 from adengine.causal_simulation import build_causal_dataset, true_effect_summary
 
 SEGMENTS = ["Champions", "Loyal Customers", "Potential Loyalists", "At Risk", "Hibernating"]
@@ -119,3 +124,44 @@ def test_psm_improves_covariate_balance_below_smd_threshold(confounded_dataset):
     for col in FEATURE_COLS:
         assert after[col] < 0.1, f"post-matching SMD for {col} exceeds the 0.1 acceptance bar"
         assert after[col] < before[col]
+
+
+def test_ipw_stabilized_weights_average_near_one(confounded_dataset):
+    # Population-level property of the Hajek stabilization: E[weight] = 1.
+    # Holds closely here because the confounded layer's propensity model is
+    # well-specified and not near-separable -- see the extreme scenario below
+    # for the case where finite-sample weights can drift far from 1.
+    propensity = _fit_propensity_scores(confounded_dataset, FEATURE_COLS, "layer2_treatment", seed=42)
+    treatment = confounded_dataset["layer2_treatment"].to_numpy()
+    p_marginal = treatment.mean()
+    raw_weight = np.where(treatment, p_marginal / propensity, (1 - p_marginal) / (1 - propensity))
+    assert abs(raw_weight.mean() - 1.0) < 0.1
+
+
+def test_ipw_truncates_extreme_weights_on_near_separable_data():
+    # Craft near-perfect treatment/covariate separation with a handful of
+    # crossover units -- those get propensity scores near 0/1 and therefore
+    # raw weights far above the 99th-percentile cap, which is exactly the
+    # scenario weight truncation exists to bound.
+    rng = np.random.default_rng(0)
+    n = 500
+    x = rng.normal(0, 1, n)
+    treatment = x > 0
+    treatment[:5] = ~treatment[:5]
+    outcome = 2.0 * treatment + 0.5 * x + rng.normal(0, 1, n)
+    df = pd.DataFrame({"x": x, "t": treatment, "y": outcome})
+
+    estimate = inverse_propensity_weighting(df, ["x"], "t", "y", weight_trunc_pct=99, seed=1)
+    assert estimate.extra["n_weights_truncated"] > 0
+    assert estimate.extra["max_weight_before_truncation"] > estimate.extra["weight_cap"]
+
+
+def test_ipw_reduces_bias_vs_naive(confounded_dataset):
+    truth = true_effect_summary(confounded_dataset)["true_ate"]
+    naive = naive_diff_in_means(confounded_dataset, "layer2_outcome", "layer2_treatment")
+    ipw_estimate = inverse_propensity_weighting(
+        confounded_dataset, FEATURE_COLS, "layer2_treatment", "layer2_outcome", weight_trunc_pct=99, seed=42
+    )
+    assert abs(ipw_estimate.ate - truth) < abs(naive.ate - truth)
+    assert abs(ipw_estimate.ate - truth) < 0.05
+    assert ipw_estimate.ci_low < truth < ipw_estimate.ci_high
