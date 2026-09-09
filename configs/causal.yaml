@@ -1,0 +1,51 @@
+# Confounded-assignment causal simulation — see docs/adr/007-confounded-assignment-causal-simulation.md
+# Online Retail II carries no experiment or campaign data with a known causal
+# effect. This config parameterizes a fully synthetic potential-outcomes model
+# on top of customer_features_current: the two assignment mechanisms below
+# (random vs. confounded) observe the *same* p0(x)/p1(x)/tau(x) functions, so
+# the true ATE and the true CATE-by-segment are identical and known in both
+# layers — only Layer 2 requires an estimator that corrects for confounding.
+
+seed: 42
+
+# p0(x) = sigmoid(intercept + recency_coef*recency_z + frequency_coef*frequency_z + monetary_coef*monetary_z)
+# Baseline (untreated) conversion probability, a function of standardized RFM
+# features only (see segmentation.build_rfm_matrix, reused here) — never the
+# real target_conversion, so the ground truth stays fully synthetic and known.
+outcome_model:
+  intercept: -0.4
+  recency_coef: -0.6      # more recent purchase -> higher p0 (recency_z is winsorized recency in days, so the sign is negative)
+  frequency_coef: 0.5
+  monetary_coef: 0.4
+
+# tau(x) = base_ate + segment_uplift[segment_name]
+# Heterogeneous treatment effect by RFM segment — mirrors the diminishing-returns
+# logic already used by the Hill response curves in simulator.py: near-ceiling
+# segments (Champions) get less incremental lift, segments with the most room to
+# move (At Risk, Hibernating) get more.
+treatment_effect:
+  base_ate: 0.08
+  segment_uplift:
+    Champions: -0.03
+    Loyal Customers: 0.0
+    Potential Loyalists: 0.05
+    At Risk: 0.07
+    Hibernating: 0.03
+
+# Layer 2 — confounded assignment: P(T=1|x) = sigmoid(confound_intercept + confounding_strength*monetary_z)
+# Higher-value customers are preferentially targeted — the most common and
+# realistic selection bias in marketing campaign assignment.
+confounding:
+  confound_intercept: 0.0
+  confounding_strength: 1.2   # tunable — higher = more selection bias, naive diff-in-means diverges further
+
+# Difference-in-Differences panel (customer x month, built from fact_transactions).
+did:
+  launch_date: "2011-05-15"      # deliberately mid-year, away from the real Nov/Dec seasonality spike in this dataset
+  pre_months: 3
+  post_months: 3
+  violate_parallel_trends: false # flip to true only for the dedicated violation-detection test
+
+validation:
+  true_effect_tolerance_pct: 5.0
+  n_repetitions: 1000

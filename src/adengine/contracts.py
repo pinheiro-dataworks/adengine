@@ -87,3 +87,27 @@ synthetic_attribution_schema = DataFrameSchema(
     strict=True,
     coerce=False,
 )
+
+# ADR-007 — confounded-assignment causal simulation. Both Layer 1 (random) and
+# Layer 2 (confounded) treatment/outcome pairs live in one table since they share
+# the same underlying potential-outcomes model (p0, p1, true_tau) and differ only
+# in the assignment mechanism.
+causal_simulation_schema = DataFrameSchema(
+    {
+        "customer_id": Column(str, nullable=False, unique=True),
+        "segment_name": Column(str, nullable=False),
+        "recency_z": Column(float, nullable=False),
+        "frequency_z": Column(float, nullable=False),
+        "monetary_z": Column(float, nullable=False),
+        "p0": Column(float, Check.in_range(0.0, 1.0), nullable=False),
+        "p1": Column(float, Check.in_range(0.0, 1.0), nullable=False),
+        "true_tau": Column(float, nullable=False),
+        "layer1_treatment": Column(bool, nullable=False),
+        "layer1_outcome": Column(pa.Int8, Check.isin([0, 1]), nullable=False),
+        "layer2_propensity": Column(float, Check.in_range(0.0, 1.0), nullable=False),
+        "layer2_treatment": Column(bool, nullable=False),
+        "layer2_outcome": Column(pa.Int8, Check.isin([0, 1]), nullable=False),
+    },
+    strict=True,
+    coerce=False,
+)
