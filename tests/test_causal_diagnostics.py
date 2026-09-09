@@ -10,6 +10,7 @@ import pytest
 
 from adengine.causal_diagnostics import (
     covariate_balance_table,
+    did_pretrend_summary,
     overlap_check,
     overlap_histogram,
     recovery_of_truth,
@@ -115,3 +116,15 @@ def test_recovery_of_truth_abs_error_is_exact():
     estimates = {"ipw": _fake_estimate("ipw", ate=0.25, ci_low=0.2, ci_high=0.3)}
     report = recovery_of_truth(estimates, true_ate=0.10)
     assert report.iloc[0]["abs_error"] == pytest.approx(0.15)
+
+
+def test_did_pretrend_summary_aggregates_by_month_and_arm():
+    panel = pd.DataFrame({
+        "relative_month": [-1, -1, -1, -1, 0, 0],
+        "treatment": [True, True, False, False, True, False],
+        "did_outcome": [1, 0, 0, 0, 1, 1],
+    })
+    summary = did_pretrend_summary(panel)
+    row = summary[(summary["relative_month"] == -1) & (summary["treatment"])].iloc[0]
+    assert row["mean_outcome"] == pytest.approx(0.5)
+    assert len(summary) == 4  # (-1, True), (-1, False), (0, True), (0, False)

@@ -8,6 +8,14 @@
                             the known true ATE, absolute error, and whether
                             its CI captures the truth -- every method is
                             reported, including whichever performs worst.
+  did_pretrend_summary      mean outcome by relative_month x arm -- the data
+                            behind the dashboard's parallel-trends chart.
+
+main() orchestrates the full causal analysis: reads causal_simulation.py's
+output, re-derives the DiD panel (cheap, deterministic -- not persisted in
+full, only its pre-trend summary is), runs all five estimators from
+causal_estimators.py on the confounded layer, runs every diagnostic here,
+and writes the marts artifacts the dashboard's Causal Identification page reads.
 """
 from __future__ import annotations
 
@@ -17,7 +25,7 @@ from scipy import stats
 
 from adengine.causal_estimators import ATEEstimate
 from adengine.contracts import causal_estimates_schema
-from adengine.logging_conf import get_logger
+from adengine.logging_conf import get_logger, log_step
 
 logger = get_logger("causal_diagnostics")
 
@@ -145,3 +153,105 @@ def recovery_of_truth(estimates: dict[str, ATEEstimate], true_ate: float) -> pd.
     out = pd.DataFrame(rows).sort_values("abs_error").reset_index(drop=True)
     causal_estimates_schema.validate(out, lazy=True)
     return out
+
+
+def did_pretrend_summary(
+    panel: pd.DataFrame,
+    outcome_col: str = "did_outcome",
+    treatment_col: str = "treatment",
+    relative_month_col: str = "relative_month",
+) -> pd.DataFrame:
+    """Mean outcome by relative_month x treatment arm -- the data behind the
+    dashboard's parallel-trends chart (pre- and post-launch, both arms).
+    """
+    return (
+        panel.groupby([relative_month_col, treatment_col])[outcome_col]
+        .mean()
+        .reset_index()
+        .rename(columns={outcome_col: "mean_outcome"})
+    )
+
+
+def main() -> None:
+    import argparse
+    import json
+    from pathlib import Path
+
+    from adengine.causal_estimators import (
+        _fit_propensity_scores,
+        difference_in_differences,
+        double_ml_ate,
+        inverse_propensity_weighting,
+        naive_diff_in_means,
+        propensity_score_matching,
+    )
+    from adengine.causal_simulation import build_did_panel, true_effect_summary
+    from adengine.config import load_config
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--config", default="configs/causal.yaml")
+    parser.add_argument("--pipeline-config", default="configs/pipeline.yaml")
+    args = parser.parse_args()
+
+    causal_cfg = load_config(args.config)
+    pipe_cfg = load_config(args.pipeline_config)
+    marts_dir = Path(pipe_cfg["paths"]["marts_dir"])
+
+    dataset = pd.read_parquet(marts_dir / "causal_simulation.parquet")
+    fact = pd.read_parquet(marts_dir / "fact_transactions.parquet")
+    fact["invoice_date"] = pd.to_datetime(fact["invoice_date"], utc=True)
+
+    true_ate = true_effect_summary(dataset)["true_ate"]
+    feature_cols = ["recency_z", "frequency_z", "monetary_z"]
+    seed = causal_cfg["seed"]
+
+    with log_step(logger, "causal_diagnostics.run_estimators") as rec:
+        naive = naive_diff_in_means(dataset, "layer2_outcome", "layer2_treatment")
+        psm_estimate, matched = propensity_score_matching(
+            dataset, feature_cols, "layer2_treatment", "layer2_outcome", seed=seed
+        )
+        ipw_estimate = inverse_propensity_weighting(
+            dataset, feature_cols, "layer2_treatment", "layer2_outcome", seed=seed
+        )
+        panel = build_did_panel(dataset, fact, causal_cfg)
+        did_estimate = difference_in_differences(panel)
+        dml_estimate = double_ml_ate(dataset, feature_cols, "layer2_treatment", "layer2_outcome", seed=seed)
+        rec["estimators_run"] = 5
+
+    estimates = {
+        "naive_diff_in_means": naive,
+        "psm": psm_estimate,
+        "ipw": ipw_estimate,
+        "did": did_estimate,
+        "dml": dml_estimate,
+    }
+    report = recovery_of_truth(estimates, true_ate)
+
+    balance = covariate_balance_table(dataset, matched, feature_cols, "layer2_treatment")
+    propensity = _fit_propensity_scores(dataset, feature_cols, "layer2_treatment", seed)
+    treatment = dataset["layer2_treatment"].to_numpy()
+    overlap = overlap_check(propensity, treatment)
+    overlap_hist = overlap_histogram(propensity, treatment)
+    sensitivity = rosenbaum_sensitivity(matched, "layer2_outcome")
+    pretrend = did_pretrend_summary(panel)
+
+    balance.to_parquet(marts_dir / "causal_balance_table.parquet", index=False)
+    report.to_parquet(marts_dir / "causal_estimates_comparison.parquet", index=False)
+    overlap_hist.to_parquet(marts_dir / "causal_overlap.parquet", index=False)
+    sensitivity.to_parquet(marts_dir / "causal_sensitivity.parquet", index=False)
+    pretrend.to_parquet(marts_dir / "causal_did_panel_summary.parquet", index=False)
+
+    summary = {
+        "true_ate": true_ate,
+        "best_method": report.iloc[0]["method"],
+        "worst_method": report.iloc[-1]["method"],
+        "confounding_strength": causal_cfg["confounding"]["confounding_strength"],
+        "overlap": overlap,
+        "did_parallel_trends_holds": did_estimate.extra["parallel_trends_holds"],
+    }
+    (marts_dir / "causal_summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    logger.info(json.dumps({"step": "causal_diagnostics.done", **summary}, default=str))
+
+
+if __name__ == "__main__":
+    main()
