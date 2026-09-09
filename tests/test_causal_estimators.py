@@ -13,6 +13,7 @@ import pytest
 from adengine.causal_estimators import (
     _fit_propensity_scores,
     difference_in_differences,
+    double_ml_ate,
     inverse_propensity_weighting,
     naive_diff_in_means,
     propensity_score_matching,
@@ -218,3 +219,30 @@ def test_did_flags_violation_and_estimate_becomes_more_biased(did_dataset, caplo
     assert violated_estimate.extra["parallel_trends_holds"] is False
     assert "parallel-trends check FAILED" in caplog.text
     assert abs(violated_estimate.ate - truth) > abs(default_estimate.ate - truth)
+
+
+@pytest.fixture(scope="module")
+def dml_estimate(confounded_dataset):
+    # n_folds=3 keeps this fast (~1-3s) -- verified this doesn't materially
+    # change accuracy vs. n_folds=5 on the real committed dataset.
+    return double_ml_ate(confounded_dataset, FEATURE_COLS, "layer2_treatment", "layer2_outcome", n_folds=3, seed=42)
+
+
+def test_dml_point_estimate_beats_naive(confounded_dataset, dml_estimate):
+    truth = true_effect_summary(confounded_dataset)["true_ate"]
+    naive = naive_diff_in_means(confounded_dataset, "layer2_outcome", "layer2_treatment")
+    assert abs(dml_estimate.ate - truth) < abs(naive.ate - truth)
+    assert abs(dml_estimate.ate - truth) < 0.06
+
+
+def test_dml_reports_a_well_formed_confidence_interval(dml_estimate):
+    # The Definition of Done requires DML to report an interval, not just a
+    # point -- this guards against a degenerate/collapsed CI slipping through.
+    assert dml_estimate.ci_low < dml_estimate.ate < dml_estimate.ci_high
+    assert dml_estimate.extra["se"] > 0
+    assert np.isfinite([dml_estimate.ate, dml_estimate.ci_low, dml_estimate.ci_high]).all()
+
+
+def test_dml_ci_covers_the_known_truth(confounded_dataset, dml_estimate):
+    truth = true_effect_summary(confounded_dataset)["true_ate"]
+    assert dml_estimate.ci_low < truth < dml_estimate.ci_high
