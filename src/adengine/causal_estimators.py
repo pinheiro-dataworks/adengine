@@ -170,3 +170,71 @@ def inverse_propensity_weighting(
             "max_weight_before_truncation": float(raw_weight.max()),
         },
     )
+
+
+def difference_in_differences(
+    panel: pd.DataFrame,
+    outcome_col: str = "did_outcome",
+    treatment_col: str = "treatment",
+    is_post_col: str = "is_post",
+    relative_month_col: str = "relative_month",
+    parallel_trends_slope_threshold: float = 0.015,
+) -> ATEEstimate:
+    """Closed-form 2x2 DiD on a customer x month panel (built by
+    causal_simulation.build_did_panel):
+
+        ate = (treated_post - treated_pre) - (control_post - control_pre)
+
+    The parallel-trends pre-period check is always run and always reported
+    in `extra` -- pass or fail -- never silently omitted, since a DiD
+    estimate without that check reported is not trustworthy on its own.
+    """
+    def _group_mean(treatment: bool, is_post: bool) -> float:
+        mask = (panel[treatment_col] == treatment) & (panel[is_post_col] == is_post)
+        return float(panel.loc[mask, outcome_col].mean())
+
+    def _group_var_n(treatment: bool, is_post: bool) -> tuple[float, int]:
+        mask = (panel[treatment_col] == treatment) & (panel[is_post_col] == is_post)
+        values = panel.loc[mask, outcome_col]
+        return float(values.var(ddof=1)), len(values)
+
+    treated_pre, treated_post = _group_mean(True, False), _group_mean(True, True)
+    control_pre, control_post = _group_mean(False, False), _group_mean(False, True)
+    ate = (treated_post - treated_pre) - (control_post - control_pre)
+
+    var_tp, n_tp = _group_var_n(True, True)
+    var_tr, n_tr = _group_var_n(True, False)
+    var_cp, n_cp = _group_var_n(False, True)
+    var_cr, n_cr = _group_var_n(False, False)
+    se = float(np.sqrt(var_tp / n_tp + var_tr / n_tr + var_cp / n_cp + var_cr / n_cr))
+
+    def _pre_period_slope(treatment: bool) -> float:
+        pre = panel[(~panel[is_post_col]) & (panel[treatment_col] == treatment)]
+        by_month = pre.groupby(relative_month_col)[outcome_col].mean()
+        return float(np.polyfit(by_month.index.to_numpy(), by_month.to_numpy(), 1)[0])
+
+    slope_treated, slope_control = _pre_period_slope(True), _pre_period_slope(False)
+    slope_diff = abs(slope_treated - slope_control)
+    parallel_trends_holds = slope_diff < parallel_trends_slope_threshold
+
+    if not parallel_trends_holds:
+        logger.warning(
+            "difference_in_differences: parallel-trends check FAILED "
+            f"(slope diff {slope_diff:.4f} >= threshold {parallel_trends_slope_threshold}); "
+            "the DiD estimate below should not be trusted as-is."
+        )
+
+    return ATEEstimate(
+        method="did",
+        ate=float(ate),
+        ci_low=float(ate - 1.96 * se),
+        ci_high=float(ate + 1.96 * se),
+        n_treated=n_tp + n_tr,
+        n_control=n_cp + n_cr,
+        extra={
+            "pre_trend_slope_treated": slope_treated,
+            "pre_trend_slope_control": slope_control,
+            "pre_trend_slope_diff": slope_diff,
+            "parallel_trends_holds": bool(parallel_trends_holds),
+        },
+    )
