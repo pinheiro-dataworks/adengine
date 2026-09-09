@@ -9,6 +9,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 import pytest
+from scipy import stats
 
 from adengine.causal_estimators import (
     _fit_propensity_scores,
@@ -17,6 +18,7 @@ from adengine.causal_estimators import (
     inverse_propensity_weighting,
     naive_diff_in_means,
     propensity_score_matching,
+    t_learner_cate,
 )
 from adengine.causal_simulation import build_causal_dataset, build_did_panel, true_effect_summary
 
@@ -195,6 +197,27 @@ def test_ipw_reduces_bias_vs_naive(confounded_dataset):
     assert abs(ipw_estimate.ate - truth) < abs(naive.ate - truth)
     assert abs(ipw_estimate.ate - truth) < 0.05
     assert ipw_estimate.ci_low < truth < ipw_estimate.ci_high
+
+
+def test_t_learner_cate_segment_ranking_tracks_true_cate(did_dataset):
+    """Individual-level CATE prediction from a single binary outcome is
+    inherently noisy (see t_learner_cate's docstring) -- so this checks the
+    signal that's actually reliable: does the *segment-average* predicted
+    CATE rank segments the same way the known true_tau does? Reuses the
+    N=6000 did_dataset fixture for the same reason DiD needed it: small N
+    makes this ranking unstable (verified empirically).
+    """
+    cate_hat = t_learner_cate(did_dataset, FEATURE_COLS, "layer2_treatment", "layer2_outcome", seed=42)
+    by_segment = pd.DataFrame({"segment": did_dataset["segment_name"], "cate_hat": cate_hat, "true_tau": did_dataset["true_tau"]})
+    means = by_segment.groupby("segment")[["cate_hat", "true_tau"]].mean()
+    correlation, _ = stats.spearmanr(means["cate_hat"], means["true_tau"])
+    assert correlation > 0.5
+
+
+def test_t_learner_cate_mean_is_a_reasonable_ate_estimate(did_dataset):
+    truth = true_effect_summary(did_dataset)["true_ate"]
+    cate_hat = t_learner_cate(did_dataset, FEATURE_COLS, "layer2_treatment", "layer2_outcome", seed=42)
+    assert abs(cate_hat.mean() - truth) < 0.06
 
 
 def test_did_recovers_true_ate_when_parallel_trends_hold(did_dataset):

@@ -16,6 +16,9 @@ causal_simulation.true_effect_summary:
   double_ml_ate         cross-fitted partialling-out (Chernozhukov et al.
                         2018), implemented directly on sklearn -- see ADR-008
                         for why this is not delegated to econml.
+  t_learner_cate        per-customer CATE prediction, consumed by
+                        allocation_optimizer.py -- none of the five ATE
+                        estimators above produce a per-customer score.
 """
 from __future__ import annotations
 
@@ -301,3 +304,39 @@ def double_ml_ate(
         n_control=int((1 - treatment).sum()),
         extra={"n_folds": n_folds, "se": se},
     )
+
+
+def t_learner_cate(
+    df: pd.DataFrame,
+    feature_cols: list[str],
+    treatment_col: str,
+    outcome_col: str,
+    seed: int = 42,
+) -> np.ndarray:
+    """Per-customer CATE via a T-Learner: two HistGBM classifiers, one fit on
+    the treated arm and one on the control arm, each scoring every customer.
+    cate_hat(x) = p1_hat(x) - p0_hat(x).
+
+    Same T-Learner pattern already used for the zero-effect uplift/Qini demo
+    in propensity.py, reused here because none of the five ATE estimators
+    above produce a per-customer score -- allocation_optimizer.py needs one
+    to rank customers for budget-constrained targeting.
+
+    Honest limitation: individual-level correlation with the true per-customer
+    tau is weak (each customer contributes exactly one noisy Bernoulli draw,
+    most of whose variance is irreducible, not epistemic), even though the
+    *segment-level* average CATE this produces tracks the true CATE-by-segment
+    reasonably well (verified in tests/test_causal_estimators.py). This
+    estimator is fit for ranking customers in aggregate, not for trusting any
+    single customer's predicted effect in isolation.
+    """
+    X = df[feature_cols].to_numpy()
+    treatment = df[treatment_col].to_numpy().astype(bool)
+    outcome = df[outcome_col].to_numpy().astype(int)
+
+    model_treated = HistGradientBoostingClassifier(random_state=seed).fit(X[treatment], outcome[treatment])
+    model_control = HistGradientBoostingClassifier(random_state=seed).fit(X[~treatment], outcome[~treatment])
+
+    p1_hat = model_treated.predict_proba(X)[:, 1]
+    p0_hat = model_control.predict_proba(X)[:, 1]
+    return p1_hat - p0_hat
