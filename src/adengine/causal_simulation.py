@@ -40,21 +40,33 @@ def _sigmoid(x: np.ndarray) -> np.ndarray:
     return 1.0 / (1.0 + np.exp(-x))
 
 
+def _logit(p: np.ndarray) -> np.ndarray:
+    p = np.clip(p, 1e-6, 1 - 1e-6)
+    return np.log(p / (1 - p))
+
+
+def _baseline_logit(rfm_z: np.ndarray, cfg: dict) -> np.ndarray:
+    """logit(p0(x)) — kept separate from compute_baseline_probability so the DiD
+    panel (build_did_panel) can add time fixed effects at the logit scale before
+    applying sigmoid, instead of recomputing this per-customer baseline from scratch.
+    """
+    om = cfg["outcome_model"]
+    recency_z, frequency_z, monetary_z = rfm_z[:, 0], rfm_z[:, 1], rfm_z[:, 2]
+    return (
+        om["intercept"]
+        + om["recency_coef"] * recency_z
+        + om["frequency_coef"] * frequency_z
+        + om["monetary_coef"] * monetary_z
+    )
+
+
 def compute_baseline_probability(rfm_z: np.ndarray, cfg: dict) -> np.ndarray:
     """p0(x) — untreated conversion probability, a function of standardized RFM only.
 
     Deliberately never reads target_conversion: keeping the ground truth fully
     synthetic and closed-form is what lets recovery-of-truth be checked exactly.
     """
-    om = cfg["outcome_model"]
-    recency_z, frequency_z, monetary_z = rfm_z[:, 0], rfm_z[:, 1], rfm_z[:, 2]
-    logit = (
-        om["intercept"]
-        + om["recency_coef"] * recency_z
-        + om["frequency_coef"] * frequency_z
-        + om["monetary_coef"] * monetary_z
-    )
-    return _sigmoid(logit)
+    return _sigmoid(_baseline_logit(rfm_z, cfg))
 
 
 def compute_treatment_effect(segment_names: pd.Series, cfg: dict) -> np.ndarray:
@@ -135,6 +147,79 @@ def build_causal_dataset(customer_features: pd.DataFrame, segment_assignments: p
 
     causal_simulation_schema.validate(out, lazy=True)
     return out
+
+
+def _real_monthly_activity(fact: pd.DataFrame, customer_ids: pd.Series, months: pd.PeriodIndex) -> pd.DataFrame:
+    """Real (non-synthetic) customer x month activity flag, attached to the DiD
+    panel purely for descriptive/plotting context — never fed into did_outcome.
+    """
+    hist = fact[fact["customer_id"].isin(customer_ids)][["customer_id", "invoice_date"]].copy()
+    hist["month"] = hist["invoice_date"].dt.tz_localize(None).dt.to_period("M")
+    active = hist.groupby(["customer_id", "month"]).size().rename("n_real_transactions").reset_index()
+    active = active[active["month"].isin(months)]
+    active["real_active_this_month"] = True
+    return active[["customer_id", "month", "n_real_transactions", "real_active_this_month"]]
+
+
+def build_did_panel(causal_dataset: pd.DataFrame, fact_transactions: pd.DataFrame, cfg: dict) -> pd.DataFrame:
+    """Customer x month panel for the Difference-in-Differences estimator.
+
+    The panel's outcome (did_outcome) is fully synthetic and shares the exact
+    same true_tau as Layers 1/2: a shared linear time trend applies to both
+    arms pre-launch (parallel trends by construction), and only the treated
+    arm gets a treatment_effect bump post-launch. Setting
+    did.violate_parallel_trends=true injects an extra pre-period slope for the
+    treated arm only, so the parallel-trends diagnostic has something real to
+    catch (see tests/test_causal_simulation.py).
+
+    fact_transactions is used only to attach each customer's real transaction
+    activity as a descriptive covariate (n_real_transactions,
+    real_active_this_month) -- it never drives did_outcome, so this dataset's
+    real Nov/Dec seasonality spike cannot leak into the synthetic effect.
+    """
+    did_cfg = cfg["did"]
+    launch_period = pd.Timestamp(did_cfg["launch_date"]).to_period("M")
+    pre_months, post_months = did_cfg["pre_months"], did_cfg["post_months"]
+    trend_coef = did_cfg["trend_coef"]
+    violation_coef = did_cfg["violation_coef"]
+    violate = did_cfg["violate_parallel_trends"]
+    seed = cfg["seed"]
+
+    relative_months = list(range(-pre_months, post_months))
+    months = pd.PeriodIndex([launch_period + m for m in relative_months])
+
+    base = causal_dataset[["customer_id", "segment_name", "true_tau", "layer2_treatment"]].rename(
+        columns={"layer2_treatment": "treatment"}
+    )
+    base["baseline_logit"] = _logit(causal_dataset["p0"].to_numpy())
+
+    panel = base.merge(pd.DataFrame({"relative_month": relative_months}), how="cross")
+    panel["month"] = panel["relative_month"].apply(lambda m: launch_period + m)
+    panel["is_post"] = panel["relative_month"] >= 0
+
+    violation_term = np.where(
+        violate & panel["treatment"].to_numpy() & (panel["relative_month"].to_numpy() < 0),
+        violation_coef * panel["relative_month"].to_numpy(),
+        0.0,
+    )
+    logit_val = panel["baseline_logit"].to_numpy() + trend_coef * panel["relative_month"].to_numpy() + violation_term
+    prob_no_bump = _sigmoid(logit_val)
+    treatment_bump = panel["true_tau"].to_numpy() * panel["treatment"].to_numpy() * panel["is_post"].to_numpy()
+    prob = np.clip(prob_no_bump + treatment_bump, 0.0, 1.0)
+
+    rng = np.random.default_rng(seed + 2)  # distinct stream from Layers 1 and 2
+    panel["did_outcome"] = (rng.random(len(panel)) < prob).astype("int8")
+
+    activity = _real_monthly_activity(fact_transactions, causal_dataset["customer_id"], months)
+    txn_counts = activity.set_index(["customer_id", "month"])["n_real_transactions"]
+    panel_index = pd.MultiIndex.from_frame(panel[["customer_id", "month"]])
+    panel["n_real_transactions"] = txn_counts.reindex(panel_index).fillna(0).astype(int).to_numpy()
+    panel["real_active_this_month"] = panel["n_real_transactions"] > 0
+
+    return panel[[
+        "customer_id", "segment_name", "treatment", "month", "relative_month", "is_post",
+        "did_outcome", "n_real_transactions", "real_active_this_month",
+    ]]
 
 
 def true_effect_summary(causal_dataset: pd.DataFrame) -> dict:

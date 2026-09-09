@@ -39,12 +39,20 @@ confounding:
   confound_intercept: 0.0
   confounding_strength: 1.2   # tunable — higher = more selection bias, naive diff-in-means diverges further
 
-# Difference-in-Differences panel (customer x month, built from fact_transactions).
+# Difference-in-Differences panel (customer x month). The panel's *outcome* is
+# fully synthetic (same true_tau as Layers 1/2, applied additively post-launch);
+# fact_transactions is only used to attach each customer's real monthly activity
+# as a descriptive covariate for the dashboard, never as the effect-bearing
+# variable itself -- this dataset's real Nov/Dec seasonality spike would
+# otherwise contaminate the parallel-trends check with a non-synthetic trend
+# break unrelated to the injected effect.
 did:
   launch_date: "2011-05-15"      # deliberately mid-year, away from the real Nov/Dec seasonality spike in this dataset
   pre_months: 3
   post_months: 3
-  violate_parallel_trends: false # flip to true only for the dedicated violation-detection test
+  trend_coef: 0.03                # shared logit drift per month, identical for both arms pre-launch by default
+  violation_coef: 0.15            # extra pre-period slope applied only to the treated arm when violate_parallel_trends is true
+  violate_parallel_trends: false  # flip to true only for the dedicated violation-detection test
 
 validation:
   true_effect_tolerance_pct: 5.0
