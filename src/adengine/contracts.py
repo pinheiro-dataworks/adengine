@@ -111,3 +111,19 @@ causal_simulation_schema = DataFrameSchema(
     strict=True,
     coerce=False,
 )
+
+# ADR-008 — the central "report card": every estimator's ATE next to the known
+# true ATE from causal_simulation.true_effect_summary.
+causal_estimates_schema = DataFrameSchema(
+    {
+        "method": Column(str, Check.isin(["naive_diff_in_means", "psm", "ipw", "did", "dml"]), nullable=False, unique=True),
+        "estimated_ate": Column(float, nullable=False),
+        "true_ate": Column(float, nullable=False),
+        "abs_error": Column(float, Check.ge(0), nullable=False),
+        "ci_low": Column(float, nullable=False),
+        "ci_high": Column(float, nullable=False),
+        "ci_captures_truth": Column(bool, nullable=False),
+    },
+    strict=True,
+    coerce=False,
+)
