@@ -9,7 +9,13 @@ description = "AdEngine — marketing analytics: propensity, RFM segmentation, m
 requires-python = ">=3.11"
 readme = "README.md"
 dependencies = [
-    "pandas>=2.2",
+    # pandas pinned below 3.0: pandas 3.x changed pd.to_datetime(..., utc=True)
+    # to default to datetime64[us, UTC] instead of [ns, UTC], which breaks
+    # every Pandera schema in contracts.py that pins the nanosecond dtype
+    # exactly. streamlit itself already requires pandas<3 (pip warns on this
+    # if you try to force pandas 3.x alongside it) -- this just makes that
+    # constraint explicit instead of relying on a transitive warning.
+    "pandas>=2.2,<3.0",
     "pyarrow>=16",
     "scikit-learn>=1.5",
     "pandera>=0.20",
