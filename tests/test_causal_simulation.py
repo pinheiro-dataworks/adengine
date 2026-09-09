@@ -12,6 +12,7 @@ import pytest
 
 from adengine.causal_simulation import (
     build_causal_dataset,
+    build_did_panel,
     compute_baseline_probability,
     compute_treatment_effect,
     simulate_confounded_assignment,
@@ -52,6 +53,32 @@ def _synthetic_customer_features(n: int, seed: int) -> pd.DataFrame:
 def _synthetic_segments(customer_ids: pd.Series, seed: int) -> pd.DataFrame:
     rng = np.random.default_rng(seed)
     return pd.DataFrame({"customer_id": customer_ids, "segment_name": rng.choice(SEGMENTS, len(customer_ids))})
+
+
+def _empty_fact_transactions() -> pd.DataFrame:
+    return pd.DataFrame({
+        "customer_id": pd.Series(dtype=str),
+        "invoice_date": pd.Series(dtype="datetime64[ns, UTC]"),
+        "revenue": pd.Series(dtype=float),
+    })
+
+
+DID_CFG = {
+    **CFG,
+    "did": {
+        "launch_date": "2023-05-15",
+        "pre_months": 3,
+        "post_months": 3,
+        "trend_coef": 0.03,
+        "violation_coef": 0.15,
+        "violate_parallel_trends": False,
+    },
+}
+
+
+def _pretrend_slope(panel: pd.DataFrame, treatment: bool) -> float:
+    sub = panel[(~panel["is_post"]) & (panel["treatment"] == treatment)].groupby("relative_month")["did_outcome"].mean()
+    return float(np.polyfit(sub.index.to_numpy(), sub.to_numpy(), 1)[0])
 
 
 @pytest.fixture
@@ -154,3 +181,61 @@ def test_confounded_layer_treated_arm_still_shows_higher_conversion_on_average()
     assert 0.0 < np.mean(treated_rates) < 1.0
     assert 0.0 < np.mean(control_rates) < 1.0
     assert np.mean(treated_rates) > np.mean(control_rates), "treated arm should still show higher conversion on average"
+
+
+@pytest.fixture(scope="module")
+def did_fixtures():
+    # A large N is needed here: pre-trend slope is estimated from only 3
+    # monthly means per arm, so small samples make the slope comparison noisy
+    # (verified empirically -- N=600 flips the sign of which slope is larger;
+    # N=6000 is stable across many random seeds).
+    cf = _synthetic_customer_features(6000, seed=10)
+    seg = _synthetic_segments(cf["customer_id"], seed=20)
+    fact = _empty_fact_transactions()
+    dataset = build_causal_dataset(cf, seg, DID_CFG)
+    return dataset, fact
+
+
+def test_did_panel_shape_and_columns(did_fixtures):
+    dataset, fact = did_fixtures
+    panel = build_did_panel(dataset, fact, DID_CFG)
+    pre_months, post_months = DID_CFG["did"]["pre_months"], DID_CFG["did"]["post_months"]
+    assert len(panel) == len(dataset) * (pre_months + post_months)
+    assert set(panel.columns) == {
+        "customer_id", "segment_name", "treatment", "month", "relative_month",
+        "is_post", "did_outcome", "n_real_transactions", "real_active_this_month",
+    }
+    assert panel["did_outcome"].isin([0, 1]).all()
+    assert set(panel["relative_month"].unique()) == set(range(-pre_months, post_months))
+    assert (panel["is_post"] == (panel["relative_month"] >= 0)).all()
+
+
+def test_did_panel_pre_trends_are_parallel_by_default(did_fixtures):
+    dataset, fact = did_fixtures
+    panel = build_did_panel(dataset, fact, DID_CFG)
+    slope_diff = abs(_pretrend_slope(panel, True) - _pretrend_slope(panel, False))
+    assert slope_diff < 0.015
+
+
+def test_did_panel_violation_flag_breaks_parallel_trends(did_fixtures):
+    dataset, fact = did_fixtures
+    default_panel = build_did_panel(dataset, fact, DID_CFG)
+    violated_cfg = {**DID_CFG, "did": {**DID_CFG["did"], "violate_parallel_trends": True}}
+    violated_panel = build_did_panel(dataset, fact, violated_cfg)
+
+    default_diff = abs(_pretrend_slope(default_panel, True) - _pretrend_slope(default_panel, False))
+    violated_diff = abs(_pretrend_slope(violated_panel, True) - _pretrend_slope(violated_panel, False))
+    assert violated_diff > default_diff
+    assert violated_diff > 0.015, "the violation flag must produce a detectable, not just marginally larger, break"
+
+
+def test_did_panel_treatment_bump_only_applies_post_launch(did_fixtures):
+    dataset, fact = did_fixtures
+    panel = build_did_panel(dataset, fact, DID_CFG)
+
+    def mean_outcome(treatment: bool, is_post: bool) -> float:
+        return panel[(panel["treatment"] == treatment) & (panel["is_post"] == is_post)]["did_outcome"].mean()
+
+    manual_did = (mean_outcome(True, True) - mean_outcome(True, False)) - (mean_outcome(False, True) - mean_outcome(False, False))
+    true_ate = true_effect_summary(dataset)["true_ate"]
+    assert manual_did == pytest.approx(true_ate, abs=0.03)
