@@ -127,3 +127,16 @@ causal_estimates_schema = DataFrameSchema(
     strict=True,
     coerce=False,
 )
+
+# ADR-009 — per-customer output of the MILP budget-constrained targeting optimizer.
+allocation_result_schema = DataFrameSchema(
+    {
+        "customer_id": Column(str, nullable=False, unique=True),
+        "segment_name": Column(str, nullable=False),
+        "cate_hat": Column(float, nullable=False),
+        "cost": Column(float, Check.gt(0), nullable=False),
+        "treated": Column(bool, nullable=False),
+    },
+    strict=True,
+    coerce=False,
+)
