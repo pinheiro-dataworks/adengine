@@ -22,7 +22,13 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "ruff>=0.5", "pytest-cov>=5"]
+# ruff pinned below 0.16: that release widened ruff's default rule set
+# (e.g. C408, TRY004, BLE001), which the existing codebase was never
+# written or reviewed against. Pinning restores the linting behavior the
+# whole project has always been developed and CI-tested under, rather
+# than silently inheriting whatever ruff considers "default" on the day
+# CI happens to run `pip install`.
+dev = ["pytest>=8", "ruff>=0.15,<0.16", "pytest-cov>=5"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
