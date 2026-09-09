@@ -12,11 +12,12 @@ import pytest
 
 from adengine.causal_estimators import (
     _fit_propensity_scores,
+    difference_in_differences,
     inverse_propensity_weighting,
     naive_diff_in_means,
     propensity_score_matching,
 )
-from adengine.causal_simulation import build_causal_dataset, true_effect_summary
+from adengine.causal_simulation import build_causal_dataset, build_did_panel, true_effect_summary
 
 SEGMENTS = ["Champions", "Loyal Customers", "Potential Loyalists", "At Risk", "Hibernating"]
 CFG = {
@@ -35,6 +36,17 @@ CFG = {
     "confounding": {"confound_intercept": 0.0, "confounding_strength": 1.2},
 }
 FEATURE_COLS = ["recency_z", "frequency_z", "monetary_z"]
+DID_CFG = {
+    **CFG,
+    "did": {
+        "launch_date": "2023-05-15",
+        "pre_months": 3,
+        "post_months": 3,
+        "trend_coef": 0.03,
+        "violation_coef": 0.15,
+        "violate_parallel_trends": False,
+    },
+}
 
 
 def _smd(df: pd.DataFrame, col: str, treatment_col: str) -> float:
@@ -59,11 +71,28 @@ def _synthetic_segments(customer_ids: pd.Series, seed: int) -> pd.DataFrame:
     return pd.DataFrame({"customer_id": customer_ids, "segment_name": rng.choice(SEGMENTS, len(customer_ids))})
 
 
+def _empty_fact_transactions() -> pd.DataFrame:
+    return pd.DataFrame({
+        "customer_id": pd.Series(dtype=str),
+        "invoice_date": pd.Series(dtype="datetime64[ns, UTC]"),
+        "revenue": pd.Series(dtype=float),
+    })
+
+
 @pytest.fixture(scope="module")
 def confounded_dataset() -> pd.DataFrame:
     cf = _synthetic_customer_features(2000, seed=100)
     seg = _synthetic_segments(cf["customer_id"], seed=200)
     return build_causal_dataset(cf, seg, CFG)
+
+
+@pytest.fixture(scope="module")
+def did_dataset() -> pd.DataFrame:
+    # Same N=6000 rationale as tests/test_causal_simulation.py: the pre-period
+    # slope comparison is noisy below a few thousand customers.
+    cf = _synthetic_customer_features(6000, seed=10)
+    seg = _synthetic_segments(cf["customer_id"], seed=20)
+    return build_causal_dataset(cf, seg, DID_CFG)
 
 
 def test_naive_diff_in_means_exact_arithmetic():
@@ -165,3 +194,27 @@ def test_ipw_reduces_bias_vs_naive(confounded_dataset):
     assert abs(ipw_estimate.ate - truth) < abs(naive.ate - truth)
     assert abs(ipw_estimate.ate - truth) < 0.05
     assert ipw_estimate.ci_low < truth < ipw_estimate.ci_high
+
+
+def test_did_recovers_true_ate_when_parallel_trends_hold(did_dataset):
+    truth = true_effect_summary(did_dataset)["true_ate"]
+    panel = build_did_panel(did_dataset, _empty_fact_transactions(), DID_CFG)
+    estimate = difference_in_differences(panel)
+    assert estimate.extra["parallel_trends_holds"] is True
+    assert estimate.ate == pytest.approx(truth, abs=0.03)
+    assert estimate.ci_low < truth < estimate.ci_high
+
+
+def test_did_flags_violation_and_estimate_becomes_more_biased(did_dataset, caplog):
+    truth = true_effect_summary(did_dataset)["true_ate"]
+    default_panel = build_did_panel(did_dataset, _empty_fact_transactions(), DID_CFG)
+    violated_cfg = {**DID_CFG, "did": {**DID_CFG["did"], "violate_parallel_trends": True}}
+    violated_panel = build_did_panel(did_dataset, _empty_fact_transactions(), violated_cfg)
+
+    default_estimate = difference_in_differences(default_panel)
+    with caplog.at_level("WARNING", logger="adengine.causal_estimators"):
+        violated_estimate = difference_in_differences(violated_panel)
+
+    assert violated_estimate.extra["parallel_trends_holds"] is False
+    assert "parallel-trends check FAILED" in caplog.text
+    assert abs(violated_estimate.ate - truth) > abs(default_estimate.ate - truth)
