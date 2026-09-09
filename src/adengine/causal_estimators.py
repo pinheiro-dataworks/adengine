@@ -116,3 +116,57 @@ def propensity_score_matching(
         },
     )
     return estimate, matched_df
+
+
+def inverse_propensity_weighting(
+    df: pd.DataFrame,
+    feature_cols: list[str],
+    treatment_col: str,
+    outcome_col: str,
+    weight_trunc_pct: float = 99,
+    seed: int = 42,
+) -> ATEEstimate:
+    """Stabilized (Hajek) inverse-propensity weighting.
+
+    Stabilization multiplies each weight by the marginal treatment rate
+    instead of using raw 1/e(x), which keeps weights centered near 1 for a
+    well-specified propensity model. Truncating at the weight_trunc_pct
+    percentile bounds the variance blow-up a handful of near-zero propensity
+    scores would otherwise cause.
+    """
+    df = df.reset_index(drop=True)
+    propensity = _fit_propensity_scores(df, feature_cols, treatment_col, seed)
+    treatment = df[treatment_col].to_numpy().astype(bool)
+    outcome = df[outcome_col].to_numpy(dtype=float)
+
+    p_treat_marginal = treatment.mean()
+    raw_weight = np.where(
+        treatment, p_treat_marginal / propensity, (1 - p_treat_marginal) / (1 - propensity)
+    )
+
+    cap = float(np.percentile(raw_weight, weight_trunc_pct))
+    weight = np.minimum(raw_weight, cap)
+    n_truncated = int((raw_weight > cap).sum())
+
+    treated_mean = float(np.sum(weight[treatment] * outcome[treatment]) / np.sum(weight[treatment]))
+    control_mean = float(np.sum(weight[~treatment] * outcome[~treatment]) / np.sum(weight[~treatment]))
+    ate = treated_mean - control_mean
+
+    # Weighted-residual sandwich approximation for the SE of each Hajek mean.
+    var_treated = np.sum((weight[treatment] * (outcome[treatment] - treated_mean)) ** 2) / (np.sum(weight[treatment]) ** 2)
+    var_control = np.sum((weight[~treatment] * (outcome[~treatment] - control_mean)) ** 2) / (np.sum(weight[~treatment]) ** 2)
+    se = float(np.sqrt(var_treated + var_control))
+
+    return ATEEstimate(
+        method="ipw",
+        ate=ate,
+        ci_low=ate - 1.96 * se,
+        ci_high=ate + 1.96 * se,
+        n_treated=int(treatment.sum()),
+        n_control=int((~treatment).sum()),
+        extra={
+            "n_weights_truncated": n_truncated,
+            "weight_cap": cap,
+            "max_weight_before_truncation": float(raw_weight.max()),
+        },
+    )
