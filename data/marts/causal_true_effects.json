@@ -1,0 +1,10 @@
+{
+  "true_ate": 0.1078,
+  "true_cate_by_segment": {
+    "At Risk": 0.15,
+    "Champions": 0.05,
+    "Hibernating": 0.11,
+    "Loyal Customers": 0.08,
+    "Potential Loyalists": 0.13
+  }
+}

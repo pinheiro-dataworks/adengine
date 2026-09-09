@@ -1,0 +1,14 @@
+{
+  "true_ate": 0.1078,
+  "best_method": "dml",
+  "worst_method": "naive_diff_in_means",
+  "confounding_strength": 1.2,
+  "overlap": {
+    "pct_in_common_support": 98.26485839648983,
+    "propensity_treated_mean": 0.6107983858669419,
+    "propensity_control_mean": 0.3895310825813948,
+    "min_propensity": 0.0053224182678959266,
+    "max_propensity": 0.996563180692702
+  },
+  "did_parallel_trends_holds": true
+}
