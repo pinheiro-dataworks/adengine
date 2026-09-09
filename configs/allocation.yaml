@@ -1,0 +1,20 @@
+# Budget-constrained treatment targeting -- see docs/adr/009-milp-allocation-formulation.md
+#
+# Complements, does not replace, simulator.py's Hill-curve budget simulator:
+# that decides how much to spend per channel; this decides which customers,
+# within a channel's spend, actually receive the treatment.
+
+seed: 42
+budget: 5000  # monthly budget for the targeted intervention (a retention nudge to existing customers), GBP
+
+# Per-customer treatment cost -- log-normal, deliberately much cheaper than
+# the CAC in configs/attribution.yaml: this is the cost of a retention nudge
+# to an *existing* customer (e.g. a personalized discount or outreach call),
+# not new-customer acquisition, so it belongs on a different scale.
+cost_model:
+  mean_log: 2.0     # ~ GBP 7.5 mean
+  sigma_log: 0.4
+
+# Optional per-segment spend caps, as a fraction of the total budget. Empty
+# means the only constraint is the overall budget.
+segment_capacity_pct: {}

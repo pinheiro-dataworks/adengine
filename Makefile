@@ -1,4 +1,4 @@
-.PHONY: download pipeline train app test lint clean
+.PHONY: download pipeline train causal app test lint clean
 
 download:
 	python scripts/download_data.py --config configs/pipeline.yaml
@@ -13,6 +13,12 @@ train:
 	python -m adengine.propensity   --config configs/model.yaml --pipeline-config configs/pipeline.yaml
 	python -m adengine.metrics      --config configs/model.yaml --pipeline-config configs/pipeline.yaml
 	python -m adengine.simulator    --config configs/model.yaml --pipeline-config configs/pipeline.yaml
+
+# Causal-inference extension (ADR-007/008/009) -- additive, run after `train`.
+causal:
+	python -m adengine.causal_simulation   --config configs/causal.yaml --pipeline-config configs/pipeline.yaml
+	python -m adengine.causal_diagnostics  --config configs/causal.yaml --pipeline-config configs/pipeline.yaml
+	python -m adengine.allocation_optimizer --config configs/allocation.yaml --causal-config configs/causal.yaml --pipeline-config configs/pipeline.yaml
 
 app:
 	streamlit run app/Home.py

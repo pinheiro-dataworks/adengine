@@ -3,7 +3,7 @@
 </p>
 
 <h1 align="center">AdEngine</h1>
-<p align="center"><b>Marketing analytics: propensity, RFM segmentation, media metrics, and budget optimization</b></p>
+<p align="center"><b>Marketing analytics: propensity, RFM segmentation, causal inference, media metrics, and budget optimization</b></p>
 <p align="center">A production-shaped data product built on the Online Retail II (UCI) dataset — not a notebook.</p>
 
 ---
@@ -15,7 +15,13 @@ split a fixed media budget across channels under diminishing returns. Answering 
 pipeline with an anti-leakage guarantee, a calibrated (not just accurate) model, and a metrics engine built from pure,
 testable functions — not three disconnected notebooks that happen to load the same CSV.
 
-AdEngine is that pipeline, plus a six-page dashboard that consumes only its output artifacts.
+A fourth question sits on top of the first three: once you know *who* is likely to respond, how do you tell a genuine
+causal effect apart from a confounded correlation, and which customers should actually receive a constrained budget's
+worth of treatment? Online Retail II has no real experiment to answer that with, so AdEngine builds a second synthetic
+layer with a *known* causal effect (ADR-007) purely to validate five estimators — naive, PSM, IPW, DiD, and Double ML —
+against ground truth, then feeds the result into a budget-constrained MILP targeting optimizer.
+
+AdEngine is that pipeline, plus an eight-page dashboard that consumes only its output artifacts.
 
 ## Architecture
 
@@ -34,15 +40,23 @@ flowchart TD
     E2 --> G
     F --> G
     G --> H[Budget simulator: Hill curves + SLSQP]
-    E1 --> I[Streamlit dashboard, 6 pages]
+    D3 --> J["Causal simulation: random + confounded layers (ADR-007)"]
+    E1 --> J
+    J --> K["Estimators: naive / PSM / IPW / DiD / DML (ADR-008)"]
+    K --> L[Causal diagnostics: balance / overlap / Rosenbaum / recovery-of-truth]
+    K --> M["Allocation optimizer: MILP knapsack (ADR-009)"]
+    E1 --> I[Streamlit dashboard, 8 pages]
     E2 --> I
     G --> I
     H --> I
+    L --> I
+    M --> I
 ```
 
-**Non-negotiable principles:** zero-cost stack (pandas, scikit-learn, Plotly, Streamlit, `lifetimes`); full reproducibility
-from a clean checkout; strict separation between exploration and production code; no temporal leakage, ever; the synthetic
-media-attribution layer is labeled everywhere it appears.
+**Non-negotiable principles:** zero-cost stack (pandas, scikit-learn, scipy, Plotly, Streamlit, `lifetimes`) — the entire
+causal-inference and MILP-allocation extension adds **zero new dependencies** to this list; full reproducibility from a
+clean checkout; strict separation between exploration and production code; no temporal leakage, ever; every synthetic
+layer (media attribution, causal ground truth) is labeled everywhere it appears.
 
 ## Run it
 
@@ -65,13 +79,16 @@ python -m adengine.segmentation --config configs/model.yaml --pipeline-config co
   python -m adengine.propensity --config configs/model.yaml --pipeline-config configs/pipeline.yaml && \
   python -m adengine.metrics --config configs/model.yaml --pipeline-config configs/pipeline.yaml && \
   python -m adengine.simulator --config configs/model.yaml --pipeline-config configs/pipeline.yaml
+python -m adengine.causal_simulation --config configs/causal.yaml --pipeline-config configs/pipeline.yaml && \
+  python -m adengine.causal_diagnostics --config configs/causal.yaml --pipeline-config configs/pipeline.yaml && \
+  python -m adengine.allocation_optimizer --config configs/allocation.yaml --causal-config configs/causal.yaml --pipeline-config configs/pipeline.yaml
 streamlit run app/Home.py
 ```
 
-(Equivalently: `make download && make pipeline && make train && make app` on a system with `make`.) The raw `.xlsx` is
-downloaded once, hashed, and cached; every subsequent run reads the cached Parquet bronze layer. Only the raw source file
-and the silver intermediate are gitignored (large and fully regenerable) — everything the dashboard actually reads is
-versioned.
+(Equivalently: `make download && make pipeline && make train && make causal && make app` on a system with `make`.) The
+raw `.xlsx` is downloaded once, hashed, and cached; every subsequent run reads the cached Parquet bronze layer. Only the
+raw source file and the silver intermediate are gitignored (large and fully regenerable) — everything the dashboard
+actually reads is versioned, including every causal-inference and allocation artifact.
 
 ## Results
 
@@ -124,6 +141,30 @@ a 12-month BG/NBD-projected value against a one-time acquisition cost, so it run
 (bootstrap 10–90% range: 1,604–1,653, 200 resamples) — cheap, low-ceiling channels (Email) get saturated quickly; the
 majority of incremental budget flows to the channel with the largest addressable ceiling (Paid Search).
 
+**Causal inference (recovery of truth):** a fully synthetic potential-outcomes model (ADR-007) with a known true ATE of
+**0.108**, observed under both random and confounded assignment. Five estimators, ranked by absolute error against that
+known truth:
+
+| Method | Estimated ATE | Absolute error | 95% CI captures truth |
+|---|---:|---:|:---:|
+| Double ML | 0.120 | **0.013** | ✓ |
+| Difference-in-Differences | 0.090 | 0.018 | ✓ |
+| Inverse Propensity Weighting | 0.127 | 0.019 | ✓ |
+| Propensity Score Matching | 0.083 | 0.025 | ✗ |
+| Naive diff-in-means | 0.300 | 0.193 | ✗ |
+
+The naive comparison overstates the true effect by ~3× under confounding — exactly the failure mode PSM/IPW/DiD/DML exist
+to correct. PSM alone drops the confounding covariate's standardized mean difference from 1.04 to 0.01 (well under the
+0.1 acceptance bar); Rosenbaum sensitivity analysis shows it would take a hidden confounder with an odds ratio of
+roughly 1.4–1.5 to overturn that matched-pairs result. Every estimator here — hand-rolled Double ML included — runs on
+`pandas`/`scikit-learn`/`scipy` only (see ADR-008 for why this isn't `econml`).
+
+**Budget allocation (MILP):** given a £5,000 budget and a per-customer CATE estimate (T-Learner), the exact 0/1-knapsack
+solution (`scipy.optimize.milp`, HiGHS) treats **848 of 5,014** customers for a total incremental value of **331.24**,
+edging out a greedy cate/cost heuristic (**331.18**) — treating every customer with a positive predicted effect would
+need £29,036, **5.8×** the actual budget, which is the real cost the budget constraint imposes. See ADR-009 for why this
+is `scipy.optimize.milp` rather than OR-Tools.
+
 ## Decisions and trade-offs
 
 Every non-obvious call is recorded as an ADR, not buried in a commit message:
@@ -134,6 +175,9 @@ Every non-obvious call is recorded as an ADR, not buried in a commit message:
 - [ADR-004 — Propensity model temporal validation design](docs/adr/004-temporal-validation-design.md)
 - [ADR-005 — Hill function for budget response curves](docs/adr/005-hill-response-curves.md)
 - [ADR-006 — Segmentation K selection](docs/adr/006-segmentation-k-selection.md)
+- [ADR-007 — Confounded-assignment causal simulation design](docs/adr/007-confounded-assignment-causal-simulation.md)
+- [ADR-008 — Estimator selection & validation criteria](docs/adr/008-estimator-selection-and-validation.md)
+- [ADR-009 — MILP budget-constrained allocation formulation](docs/adr/009-milp-allocation-formulation.md)
 
 ## Known limitations
 
@@ -146,19 +190,30 @@ Every non-obvious call is recorded as an ADR, not buried in a commit message:
   signal by construction.
 - **`lifetimes` (BG/NBD + Gamma-Gamma) is not under active maintenance.** `metrics.fit_bgnbd_gamma_gamma` has an automatic,
   tested fallback to a heuristic LTV (`AOV × annual frequency × margin × horizon`) if the fit fails.
+- **The causal-inference ground truth is entirely synthetic** (ADR-007) — Online Retail II has no real experiment to
+  validate an estimator against. Every number on the Causal Identification page is a recovery-of-truth demonstration
+  against a known effect, not a real causal claim about Online Retail II customers.
+- **Individual-level CATE prediction is noisy.** `causal_estimators.t_learner_cate` (used for per-customer targeting in
+  `allocation_optimizer.py`) tracks the true *segment-average* CATE well but any single customer's predicted score
+  carries real estimation error — a single binary outcome per customer is mostly irreducible noise, not something more
+  data alone fixes. The allocation optimizer is validated on aggregate outcomes, not on individual predictions.
 
 ## Project layout
 
 ```
 src/adengine/     ingestion, cleaning, contracts, features, attribution,
                   segmentation, propensity, metrics, simulator — one module
-                  per pipeline stage, each independently testable
-app/              Streamlit dashboard (Home + 5 pages); reads only from
+                  per pipeline stage, each independently testable; plus
+                  causal_simulation, causal_estimators, causal_diagnostics,
+                  and allocation_optimizer for the causal-inference extension
+app/              Streamlit dashboard (Home + 7 pages); reads only from
                   data/marts/ and models/, never trains or re-runs the pipeline
-configs/          pipeline.yaml, attribution.yaml, model.yaml — every cutoff,
-                  hyperparameter, and seed lives here, not in code
+configs/          pipeline.yaml, attribution.yaml, model.yaml, causal.yaml,
+                  allocation.yaml — every cutoff, hyperparameter, and seed
+                  lives here, not in code
 tests/            pytest suite: DQ rules, anti-leakage, pure metric functions
-                  + edge cases, simulator properties, an end-to-end smoke test
+                  + edge cases, simulator properties, an end-to-end smoke test,
+                  and the causal-inference / allocation estimator suite
 docs/adr/         architecture decision records
 ```
 

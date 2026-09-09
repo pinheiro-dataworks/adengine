@@ -1,0 +1,17 @@
+{
+  "budget": 5000,
+  "optimal": {
+    "total_cost": 4999.998138034462,
+    "total_incremental_value": 331.244644109374,
+    "n_treated": 848,
+    "solve_status": "optimal"
+  },
+  "greedy_baseline": {
+    "total_cost": 4998.495859002238,
+    "total_incremental_value": 331.1818249008237,
+    "n_treated": 847,
+    "solve_status": "greedy"
+  },
+  "milp_beats_or_matches_greedy": true,
+  "segment_capacity_pct": {}
+}
