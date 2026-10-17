@@ -5,6 +5,11 @@
 <h1 align="center">AdEngine</h1>
 <p align="center"><b>Marketing analytics: propensity, RFM segmentation, causal inference, media metrics, and budget optimization</b></p>
 <p align="center">A production-shaped data product built on the Online Retail II (UCI) dataset — not a notebook.</p>
+<p align="center">
+  <a href="https://github.com/pinheiro-dataworks/adengine/actions/workflows/ci.yml"><img src="https://github.com/pinheiro-dataworks/adengine/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
+  <img src="https://img.shields.io/badge/python-3.11%2B-blue.svg" alt="Python 3.11+">
+</p>
 
 ---
 
@@ -220,12 +225,32 @@ docs/adr/         architecture decision records
 ## Development
 
 ```bash
-make test    # pytest -v --cov=src/adengine
+make test    # pytest tests/ -v --cov=src/adengine --cov-report=term-missing
 make lint    # ruff check src/ tests/ app/
 ```
 
+**Current suite: 87 tests, 55% line coverage of `src/adengine`** (same result locally and in CI on Python 3.11).
+Coverage is concentrated where a silent error would corrupt every downstream number — the causal
+estimators, the data contracts, the metric functions, and the anti-leakage boundary:
+
+| Module | Line coverage |
+|---|---:|
+| `causal_estimators.py`, `contracts.py`, `logging_conf.py` | 100% |
+| `causal_simulation.py` | 83% |
+| `metrics.py` | 80% |
+| `cleaning.py` | 77% |
+| `features.py` | 64% |
+| `allocation_optimizer.py` | 60% |
+| `causal_diagnostics.py` | 57% |
+| `simulator.py` | 43% |
+| `segmentation.py` | 20% |
+| `propensity.py`, `attribution.py`, `ingestion.py`, `config.py` | 0% |
+
+The uncovered modules are pipeline stages exercised by running the pipeline on the real dataset, not by CI; closing that
+gap is tracked in [#8](https://github.com/pinheiro-dataworks/adengine/issues/8).
+
 CI (`.github/workflows/ci.yml`) runs lint and the full test suite against the versioned fixture in `tests/fixtures/` — it
-never downloads the real dataset, so it stays fast (< 2 minutes) and deterministic.
+never downloads the real dataset, so it stays fast (under a minute per run) and deterministic.
 
 ## License
 
