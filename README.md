@@ -245,9 +245,11 @@ app/              Streamlit dashboard (Home + 7 pages); reads only from
 configs/          pipeline.yaml, attribution.yaml, model.yaml, causal.yaml,
                   allocation.yaml — every cutoff, hyperparameter, and seed
                   lives here, not in code
-tests/            pytest suite: DQ rules, anti-leakage, pure metric functions
-                  + edge cases, simulator properties, an end-to-end smoke test,
-                  and the causal-inference / allocation estimator suite
+tests/            pytest suite: bronze ingestion, DQ rules, anti-leakage,
+                  synthetic attribution, segmentation stability, propensity
+                  + Qini, pure metric functions + edge cases, simulator
+                  properties, an end-to-end smoke test, and the
+                  causal-inference / allocation estimator suite
 docs/adr/         architecture decision records
 ```
 
@@ -258,25 +260,24 @@ make test    # pytest tests/ -v --cov=src/adengine --cov-report=term-missing
 make lint    # ruff check src/ tests/ app/
 ```
 
-**Current suite: 87 tests, 55% line coverage of `src/adengine`** (same result locally and in CI on Python 3.11).
-Coverage is concentrated where a silent error would corrupt every downstream number — the causal
-estimators, the data contracts, the metric functions, and the anti-leakage boundary:
+**Current suite: 119 tests, 82% line coverage of `src/adengine`**, with a 75% floor enforced by
+`[tool.coverage.report] fail_under` in `pyproject.toml` — `make test` and CI fail if coverage drops below it.
 
 | Module | Line coverage |
 |---|---:|
-| `causal_estimators.py`, `contracts.py`, `logging_conf.py` | 100% |
+| `causal_estimators.py`, `contracts.py`, `config.py`, `ingestion.py`, `logging_conf.py` | 100% |
+| `propensity.py`, `segmentation.py`, `attribution.py` | 98–99% |
 | `causal_simulation.py` | 83% |
 | `metrics.py` | 80% |
 | `cleaning.py` | 77% |
+| `simulator.py` | 67% |
 | `features.py` | 64% |
 | `allocation_optimizer.py` | 60% |
 | `causal_diagnostics.py` | 57% |
-| `simulator.py` | 43% |
-| `segmentation.py` | 20% |
-| `propensity.py`, `attribution.py`, `ingestion.py`, `config.py` | 0% |
 
-The uncovered modules are pipeline stages exercised by running the pipeline on the real dataset, not by CI; closing that
-gap is tracked in [#8](https://github.com/pinheiro-dataworks/adengine/issues/8).
+The remaining gaps are almost entirely the `main()` entry points of `features`, `simulator`, `allocation_optimizer`,
+and `causal_diagnostics`: file-reading orchestration around functions that are tested directly, exercised end to end
+whenever the pipeline runs on the real dataset.
 
 CI (`.github/workflows/ci.yml`) runs lint and the full test suite against the versioned fixture in `tests/fixtures/` — it
 never downloads the real dataset, so it stays fast (under a minute per run) and deterministic.
