@@ -1,7 +1,7 @@
 """Anti-leakage is the load-bearing guarantee of this module (ADR-001):
 a transaction dated after `as_of` must never change a feature value, only
 the (separately-computed) target. test_as_of_boundary_is_never_crossed
-below is the mandatory test called for in adengine_escopo_tecnico.md §3.3.
+below enforces that contract directly; every new feature must pass it.
 """
 from __future__ import annotations
 

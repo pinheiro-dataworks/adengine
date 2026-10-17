@@ -1,4 +1,4 @@
-"""allocation_optimizer.py's core property (§7.3-equivalent exit criteria):
+"""allocation_optimizer.py's core property (ADR-009):
 the MILP solution always respects the budget and never does worse than the
 greedy baseline -- including the classic knapsack case where greedy is
 provably suboptimal and the MILP still finds the true optimum.

@@ -3,7 +3,7 @@
 Every function here is pure: a DataFrame or a handful of scalars in, a
 DataFrame or scalar out, no I/O, no hidden state — which is what makes them
 testable with 5-row fixtures covering the zero-conversion / zero-cost edge
-cases (§6). The only stateful pieces are the BG/NBD + Gamma-Gamma fit
+cases. The only stateful pieces are the BG/NBD + Gamma-Gamma fit
 (inherently a fit/predict step) and its heuristic fallback.
 """
 from __future__ import annotations
@@ -39,7 +39,7 @@ def ltv_cac_ratio(ltv: float, cac: float) -> float:
 def ltv_heuristic(avg_order_value: float, purchase_frequency_annual: float, gross_margin: float, horizon_years: float = 1.0) -> float:
     """LTV = AOV x annual purchase frequency x gross margin x horizon.
 
-    The documented fallback (§6) when BG/NBD + Gamma-Gamma cannot fit —
+    The fallback when BG/NBD + Gamma-Gamma cannot fit —
     e.g. too few repeat customers, or a `lifetimes` version incompatibility.
     """
     return avg_order_value * purchase_frequency_annual * gross_margin * horizon_years
@@ -125,8 +125,9 @@ def cohort_revenue_matrix(fact: pd.DataFrame, dim_customers: pd.DataFrame, obser
 def fit_bgnbd_gamma_gamma(fact: pd.DataFrame, as_of: pd.Timestamp, horizon_months: int) -> tuple[pd.DataFrame, str]:
     """Returns (customer_id, ltv_probabilistic) and the method actually used.
 
-    Falls back to the heuristic if `lifetimes` fails to import or fit — the
-    documented mitigation for the "unmaintained dependency" risk (§10).
+    Falls back to the heuristic if `lifetimes` fails to import or fit —
+    `lifetimes` is no longer actively maintained (README, Known limitations),
+    so a future NumPy/SciPy/pandas release can break it without notice.
     """
     try:
         from lifetimes import BetaGeoFitter, GammaGammaFitter

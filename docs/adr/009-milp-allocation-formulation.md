@@ -13,9 +13,9 @@ individual customers* within a channel's spend actually receive treatment.
 The two questions are complementary, not competing, and this module does not
 touch or replace `simulator.py`.
 
-`ortools` (Google's CP-SAT constraint-programming solver) was the original
-candidate, per the same reasoning process as ADR-008: check what the problem
-actually requires before reaching for a specialized framework. This
+`ortools` (Google's CP-SAT constraint-programming solver) was the first
+candidate considered. As in ADR-008, the deciding question is what the
+problem actually requires, not which framework is most capable. This
 allocation decision is, precisely, a 0/1 knapsack — maximize a linear
 objective (`sum(cate_i * x_i)`) subject to a linear budget constraint
 (`sum(cost_i * x_i) <= budget`) with binary decision variables, optionally
@@ -71,9 +71,10 @@ predicted score being individually correct.
 of the knapsack, but not always for the strict 0/1 case.
 `tests/test_allocation_optimizer.py` includes the textbook counterexample
 where greedy is provably suboptimal (picks value 160 against a true optimum
-of 220) and confirms the MILP finds the true optimum every time — the same
-"the MILP solution should never lose to the heuristic" property this
-project's Definition of Done calls for.
+of 220) and confirms the MILP finds the true optimum every time. "The MILP
+solution never loses to the heuristic" is the acceptance property: an
+exact solver that cannot beat a sort-and-fill baseline would not
+justify its cost.
 
 ## Consequences
 

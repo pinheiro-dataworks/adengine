@@ -2,8 +2,9 @@
 
 Every rule is a pure function `(DataFrame) -> (DataFrame, DQRecord)`. The
 orchestrator applies them in a fixed, config-documented order and accumulates
-the records into `data/staging/dq_report.json`. Nothing is dropped silently —
-that is the entire point of this module (adengine_escopo_tecnico.md §3.2).
+the records into `data/staging/dq_report.json`. Nothing is dropped silently:
+every row removed is attributable to a named rule, so the silver-layer row
+count can always be reconciled against bronze.
 """
 from __future__ import annotations
 

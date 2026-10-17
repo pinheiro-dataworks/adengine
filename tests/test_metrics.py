@@ -127,7 +127,7 @@ def test_compute_window_revenue_only_counts_the_realized_window():
 
 def test_fit_bgnbd_gamma_gamma_falls_back_on_bad_input():
     # A frame missing the columns lifetimes needs forces the except branch,
-    # exercising the documented heuristic-fallback mitigation (§10 risk 1).
+    # exercising the heuristic fallback that guards against `lifetimes` breakage.
     bad_fact = pd.DataFrame({"customer_id": ["A"], "invoice_date": [pd.Timestamp("2023-01-01", tz="UTC")]})
     out, method = fit_bgnbd_gamma_gamma(bad_fact, pd.Timestamp("2023-01-01", tz="UTC"), horizon_months=12)
     assert out is None

@@ -22,10 +22,10 @@ Every table, chart, and page built from this layer carries an explicit
 "Synthetic" tag in the dashboard and is documented as synthetic here and in
 the README's limitations section.
 
-**Calibration note:** the first pass used CAC parameters in the £4–£22
-range (chosen to visually match a portfolio prototype's placeholder
-numbers). Against this dataset's real historical customer value
-(BG/NBD-projected 12-month LTV of £1,200–£2,200), that produced LTV:CAC
+**Calibration note:** initial CAC parameters in the £4–£22 range were
+placeholder values with no anchor in this dataset. Against this dataset's
+real historical customer value (BG/NBD-projected 12-month LTV of
+£1,200–£2,200), that produced LTV:CAC
 ratios of 70×–570× — directionally fine but implausible to present. CAC
 parameters were rescaled roughly 8× (see `configs/attribution.yaml`) so
 LTV:CAC lands in a defensible 8×–70× range and ROAS (computed on realized
