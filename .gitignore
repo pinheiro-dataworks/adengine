@@ -8,8 +8,12 @@ data/raw/*
 data/staging/*
 !data/staging/dq_report.json
 
-# Gold marts + trained models ARE versioned on purpose: the dashboard reads
-# only from these, so a clone works immediately without running the pipeline.
+# Gold marts ARE versioned on purpose: the dashboard reads only from these,
+# so a clone works immediately without running the pipeline.
+
+# Fitted models are binary, pickle-based, and read by nothing downstream —
+# `make train` regenerates them from configs/model.yaml.
+models/*.joblib
 
 *.egg-info/
 __pycache__/
