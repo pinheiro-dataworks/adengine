@@ -1,14 +1,13 @@
-"""Cached artifact loaders — the dashboard reads only from data/marts/ and
-models/, never re-runs the pipeline (Streamlit Community Cloud's ~1GB RAM
-budget makes in-app model training the most likely cause of an
-out-of-memory crash on the free tier).
+"""Cached artifact loaders — the dashboard reads only precomputed outputs from
+data/marts/ and never re-runs the pipeline or loads a model (Streamlit
+Community Cloud's ~1GB RAM budget makes in-app model training the most likely
+cause of an out-of-memory crash on the free tier).
 """
 from __future__ import annotations
 
 import json
 from pathlib import Path
 
-import joblib
 import pandas as pd
 import streamlit as st
 import yaml
@@ -16,7 +15,6 @@ import yaml
 APP_DIR = Path(__file__).resolve().parent
 ROOT_DIR = APP_DIR.parent
 MARTS_DIR = ROOT_DIR / "data" / "marts"
-MODELS_DIR = ROOT_DIR / "models"
 CONFIGS_DIR = ROOT_DIR / "configs"
 
 
@@ -46,11 +44,6 @@ def load_manifest() -> dict | None:
     if not path.exists():
         return None
     return json.loads(path.read_text(encoding="utf-8"))
-
-
-@st.cache_resource(show_spinner=False)
-def load_model(name: str):
-    return joblib.load(MODELS_DIR / f"{name}.joblib")
 
 
 def data_available() -> bool:
