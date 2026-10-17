@@ -48,3 +48,9 @@ target-version = "py311"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.coverage.report]
+# Floor, not target: CI fails if a change drops line coverage below it.
+# Set a few points under the measured value so refactors that delete
+# covered code do not fail spuriously, while untested modules cannot land.
+fail_under = 75
