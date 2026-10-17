@@ -226,3 +226,8 @@ make lint    # ruff check src/ tests/ app/
 
 CI (`.github/workflows/ci.yml`) runs lint and the full test suite against the versioned fixture in `tests/fixtures/` — it
 never downloads the real dataset, so it stays fast (< 2 minutes) and deterministic.
+
+## License
+
+Released under the [MIT License](LICENSE). Online Retail II is distributed by the UCI Machine Learning Repository
+under CC BY 4.0 and is not covered by this license.
