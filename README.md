@@ -213,19 +213,23 @@ Every non-obvious call is recorded as an ADR, not buried in a commit message:
 - **The media-attribution layer is entirely synthetic** (channel, cost, campaign exposure) — Online Retail II has no such
   data. It is parameterized in `configs/attribution.yaml`, conditioned on real historical customer value, and labeled
   "Synthetic" everywhere it surfaces. Swapping in a real ad-platform export requires new config, not new code.
+  Tracked in [#2](https://github.com/pinheiro-dataworks/adengine/issues/2).
 - **Returns are removed, not netted**, against the original sale — there is no reliable join key in the source data to net
-  them correctly (ADR-003).
+  them correctly (ADR-003). Tracked in [#5](https://github.com/pinheiro-dataworks/adengine/issues/5).
 - **The uplift/Qini analysis is a methodology demonstration**, not a causal finding — the treatment flag carries no real
-  signal by construction.
+  signal by construction. Tracked in [#4](https://github.com/pinheiro-dataworks/adengine/issues/4).
 - **`lifetimes` (BG/NBD + Gamma-Gamma) is not under active maintenance.** `metrics.fit_bgnbd_gamma_gamma` has an automatic,
-  tested fallback to a heuristic LTV (`AOV × annual frequency × margin × horizon`) if the fit fails.
+  tested fallback to a heuristic LTV (`AOV × annual frequency × margin × horizon`) if the fit fails. Tracked in
+  [#6](https://github.com/pinheiro-dataworks/adengine/issues/6).
 - **The causal-inference ground truth is entirely synthetic** (ADR-007) — Online Retail II has no real experiment to
   validate an estimator against. Every number on the Causal Identification page is a recovery-of-truth demonstration
   against a known effect, not a real causal claim about Online Retail II customers.
+  Tracked in [#3](https://github.com/pinheiro-dataworks/adengine/issues/3).
 - **Individual-level CATE prediction is noisy.** `causal_estimators.t_learner_cate` (used for per-customer targeting in
   `allocation_optimizer.py`) tracks the true *segment-average* CATE well but any single customer's predicted score
   carries real estimation error — a single binary outcome per customer is mostly irreducible noise, not something more
   data alone fixes. The allocation optimizer is validated on aggregate outcomes, not on individual predictions.
+  Tracked in [#7](https://github.com/pinheiro-dataworks/adengine/issues/7).
 
 ## Project layout
 
