@@ -27,9 +27,10 @@ distinct marketing actions attached to it. **K=5** is chosen instead: it
 sits at a local silhouette peak exactly where the inertia elbow flattens,
 and produces the five classic RFM tiers (Champions, Loyal Customers,
 Potential Loyalists, At Risk, Hibernating), each independently actionable
-(`segmentation.SEGMENT_ACTIONS`). This is the business-interpretability
-tie-break the project's methodology calls for when the purely numeric
-criterion doesn't point to an actionable answer.
+(`segmentation.SEGMENT_ACTIONS`). When the purely numeric criterion
+points to a split with no distinct action per cluster, business
+interpretability breaks the tie — provided the chosen K still sits on a
+silhouette peak and passes the stability bar below.
 
 `configs/model.yaml: segmentation.chosen_k` pins this decision explicitly
 rather than leaving it to `argmax(silhouette)` at run time, so the choice
@@ -38,11 +39,13 @@ change.
 
 ## Stability validation
 
-K=5 clears the stability bar the doc requires before a segmentation is
-treated as production-ready: re-fitting across 20 reseeded runs gives
-ARI = 0.998 (mean); re-fitting on 50 bootstrap resamples of 80% of the
-base gives ARI = 0.952 (mean), comfortably above the 0.85 acceptance
-threshold (`segmentation.stability.ari_acceptance_threshold`).
+A segmentation is treated as production-ready only if its assignments are
+reproducible; otherwise segment-level actions would change between reruns
+for reasons unrelated to customer behavior. K=5 clears that bar:
+re-fitting across 20 reseeded runs gives ARI = 0.998 (mean); re-fitting
+on 50 bootstrap resamples of 80% of the base gives ARI = 0.952 (mean),
+comfortably above the 0.85 acceptance threshold
+(`segmentation.stability.ari_acceptance_threshold`).
 
 ## Consequences
 
