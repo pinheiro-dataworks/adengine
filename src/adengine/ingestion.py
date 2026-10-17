@@ -33,12 +33,14 @@ def _safe_str(col: pd.Series) -> pd.Series:
 
 def read_bronze_from_source(raw_xlsx: str | Path, sheets: list[str]) -> pd.DataFrame:
     """Reads every sheet of the source workbook and concatenates them as-is."""
-    xl = pd.ExcelFile(raw_xlsx)
     frames = []
-    for sheet in sheets:
-        df = pd.read_excel(xl, sheet_name=sheet)
-        df.columns = [c.strip() for c in df.columns]
-        frames.append(df)
+    # Context manager releases the file handle; an open handle keeps the
+    # workbook locked on Windows, blocking a re-download or cleanup.
+    with pd.ExcelFile(raw_xlsx) as xl:
+        for sheet in sheets:
+            df = pd.read_excel(xl, sheet_name=sheet)
+            df.columns = [c.strip() for c in df.columns]
+            frames.append(df)
     bronze = pd.concat(frames, ignore_index=True)
     bronze = bronze.rename(columns=RAW_COLUMNS)
     for col in ("invoice", "stock_code", "description", "country"):
