@@ -20,8 +20,6 @@ if not dl.data_available():
 
 dq = dl.load_dq_report()
 manifest = dl.load_manifest()
-fact = dl.load_parquet("fact_transactions")
-dim_customers = dl.load_parquet("dim_customers")
 
 st.markdown(
     '<h1 style="margin-bottom:2px;">Pipeline &amp; Data Quality</h1>'
