@@ -1,4 +1,4 @@
-"""Budget allocation simulator — Hill response curves + constrained optimization (§7).
+"""Budget allocation simulator — Hill response curves + constrained optimization (ADR-005).
 
 Hill over a log-response curve because Hill saturates: audiences are finite,
 so a curve that keeps climbing at unbounded spend would let the optimizer
@@ -112,7 +112,12 @@ def bootstrap_scenarios(
     n_resamples: int,
     seed: int,
 ) -> pd.DataFrame:
-    """Re-derive Hill params on resampled customers and re-optimize each time (§7.3)."""
+    """Re-derive Hill params on resampled customers and re-optimize each time.
+
+    Propagates sampling uncertainty in each channel's vmax (audience size x
+    mean calibrated propensity) through the optimizer, so projected total
+    conversions are reported with a 10-90% range instead of a single number.
+    """
     rng = np.random.default_rng(seed)
     channels = channel_metrics["channel"].tolist()
     cpa_by_channel = dict(zip(channel_metrics["channel"], channel_metrics["cpa"]))

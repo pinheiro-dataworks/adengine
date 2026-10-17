@@ -8,8 +8,9 @@ segmentation:
   # a local silhouette peak (0.342, tied with K=6) right where the inertia
   # elbow flattens, and produces the five classic RFM tiers (Champions /
   # Loyal / Potential Loyalists / At Risk / Hibernating) each with a
-  # distinct recommended action — the business-interpretability tie-break
-  # the scope doc calls for. See docs/adr/006-segmentation-k-selection.md.
+  # distinct recommended action — business interpretability breaks the tie
+  # when silhouette alone points to a non-actionable K. See
+  # docs/adr/006-segmentation-k-selection.md.
   chosen_k: 5
   stability:
     n_runs: 20

@@ -1,7 +1,7 @@
 """Cached artifact loaders — the dashboard reads only from data/marts/ and
 models/, never re-runs the pipeline (Streamlit Community Cloud's ~1GB RAM
-budget makes in-app training the #1 cause of free-tier deploy crashes, per
-adengine_escopo_tecnico.md §8).
+budget makes in-app model training the most likely cause of an
+out-of-memory crash on the free tier).
 """
 from __future__ import annotations
 

@@ -138,8 +138,8 @@ def test_psm_matching_is_one_to_one(confounded_dataset):
 
 
 def test_psm_improves_covariate_balance_below_smd_threshold(confounded_dataset):
-    """Acceptance bar from the extension's Definition of Done: SMD < 0.1 on
-    every matched covariate, same 0.1 convention widely used for PSM balance
+    """Acceptance bar (ADR-008): SMD < 0.1 on every matched covariate, the
+    0.1 convention widely used for PSM balance
     (mirrors the ARI >= 0.85 acceptance-bar pattern already used for
     segmentation stability in ADR-006).
     """
@@ -259,8 +259,8 @@ def test_dml_point_estimate_beats_naive(confounded_dataset, dml_estimate):
 
 
 def test_dml_reports_a_well_formed_confidence_interval(dml_estimate):
-    # The Definition of Done requires DML to report an interval, not just a
-    # point -- this guards against a degenerate/collapsed CI slipping through.
+    # A point estimate without an interval cannot be checked against the true
+    # ATE (ADR-008) -- this guards against a degenerate/collapsed CI slipping through.
     assert dml_estimate.ci_low < dml_estimate.ate < dml_estimate.ci_high
     assert dml_estimate.extra["se"] > 0
     assert np.isfinite([dml_estimate.ate, dml_estimate.ci_low, dml_estimate.ci_high]).all()

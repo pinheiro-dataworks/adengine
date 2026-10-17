@@ -1,4 +1,4 @@
-"""Property-based checks on the optimizer (§7.3 exit criteria): allocations
+"""Property-based checks on the optimizer (ADR-005): allocations
 sum to budget, respect per-channel bounds, and more budget never yields
 fewer conversions (Hill curves are monotonic non-decreasing by construction).
 """

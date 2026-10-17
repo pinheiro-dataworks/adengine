@@ -1,8 +1,8 @@
 """Pandera schemas enforced at every medallion boundary.
 
 Each schema fails loudly and reports every violation at once (not just the
-first), which is why pandera was chosen over hand-rolled assertions — see
-adengine_escopo_tecnico.md §2.3. `strict=True` means an unexpected column is
+first), which is why pandera was chosen over hand-rolled assertions that
+stop at the first failure. `strict=True` means an unexpected column is
 itself a contract violation, not a silent pass-through.
 """
 from __future__ import annotations

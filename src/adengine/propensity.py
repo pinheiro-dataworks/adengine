@@ -1,6 +1,6 @@
 """Propensity-to-convert model — logistic baseline, calibrated HistGBM, uplift.
 
-Temporal validation only (§5.2, ADR-004): the model is trained on features
+Temporal validation only (ADR-004): the model is trained on features
 computed as of T_train and evaluated on features computed as of T_test — never
 a random k-fold split, which would let the same customer's future snapshot
 leak into training. Calibration is the load-bearing metric here: the budget
@@ -192,7 +192,7 @@ def qini_coefficient(curve: pd.DataFrame, n_test: int) -> float:
 
 
 def fit_uplift_t_learner(features_df: pd.DataFrame, attribution_df: pd.DataFrame, cfg: dict) -> dict:
-    """T-Learner on the synthetic exposure flag (§5.5) — directional demo, not a causal claim.
+    """T-Learner on the synthetic exposure flag (ADR-002) — directional demo, not a causal claim.
 
     Uses a dedicated random split of the "current" snapshot (not the T_train /
     T_test propensity split): the exposure flag is a synthetic label attached

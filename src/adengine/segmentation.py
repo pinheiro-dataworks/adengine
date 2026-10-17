@@ -1,6 +1,6 @@
 """RFM segmentation — K selection, stability validation, and named profiles.
 
-Design notes (adengine_escopo_tecnico.md §4): Monetary/Frequency are
+Design notes (ADR-006): Monetary/Frequency are
 right-skewed (wholesale-buyer tail), so K-Means (Euclidean distance,
 spherical clusters) needs a log1p + light winsorization + StandardScaler
 pipeline before it can find meaningful clusters. K is chosen by silhouette,
@@ -82,7 +82,7 @@ def stability_bootstrap(X: np.ndarray, k: int, ref_labels: np.ndarray, n_bootstr
 
 
 def name_segments(profile: pd.DataFrame) -> pd.DataFrame:
-    """Rule-based naming off cluster-level medians (§4.4).
+    """Rule-based naming off cluster-level medians.
 
     Recency and frequency place each cluster in one of four behavioral
     quadrants. Within the "good recency + high frequency" quadrant, monetary
